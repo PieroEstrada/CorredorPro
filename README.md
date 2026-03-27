@@ -33,16 +33,6 @@
 
 ---
 
-## Usuarios demo incluidos
-
-| Correo                  | Contraseña  | Rol          |
-|-------------------------|-------------|--------------|
-| admin@corredor.pro      | admin123    | Administrador|
-| carlos@corredor.pro     | carlos123   | Corredor     |
-| lucia@corredor.pro      | lucia123    | Corredor     |
-
----
-
 ## Estructura de archivos
 
 ```
@@ -72,29 +62,6 @@ corredor_pro/
 ✅ Multitenancy básico (aislamiento por corredor)  
 ✅ Panel de administración de usuarios  
 ✅ Datos demo en español basados en Pucallpa  
-
----
-
-## Configuración de la IA (extracción de anuncios)
-
-La función de extracción automática desde texto utiliza la API de Anthropic (Claude).
-
-**Para que funcione:**
-- La API key debe estar configurada en el servidor donde se sirve la app
-- Si usas el archivo directamente, la clave se inyecta automáticamente por el entorno de Claude
-- En producción propia, añade al archivo `.env` o directamente en el servidor:
-  ```
-  ANTHROPIC_API_KEY=sk-ant-...
-  ```
-  Y modifica la función `extractWithAI()` en el JS para incluir el header:
-  ```javascript
-  headers: {
-    'Content-Type': 'application/json',
-    'x-api-key': 'TU_API_KEY',
-    'anthropic-version': '2023-06-01',
-    'anthropic-dangerous-direct-browser-access': 'true'
-  }
-  ```
 
 ---
 
