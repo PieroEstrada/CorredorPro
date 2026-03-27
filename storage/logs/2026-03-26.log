@@ -1,0 +1,28 @@
+[2026-03-26 21:17:18] [PARSER] Salida JSON inválida {"command":"\"python\" \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:17:18] [PARSER] Salida JSON inválida {"command":"python \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:17:18] [PARSER] Salida JSON inválida {"command":"py -3 \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:17:18] [API] No se pudo ejecutar el parser Python. Revisa CP_PYTHON_BIN y el PATH de Windows. {"route":"/extract/anuncio","method":"POST","trace":"#0 C:\\xampp\\htdocs\\corredor_pro\\app\\api.php(57): cp_extract_from_announcement('\\xF0\\x9F\\x8F\\xA1\\xE2\\x9C\\xA8 SE ALQU...')\n#1 C:\\xampp\\htdocs\\corredor_pro\\public\\api.php(4): require_once('C:\\\\xampp\\\\htdocs...')\n#2 {main}"}
+[2026-03-26 21:17:23] [PARSER] Salida JSON inválida {"command":"\"python\" \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:17:23] [PARSER] Salida JSON inválida {"command":"python \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:17:23] [PARSER] Salida JSON inválida {"command":"py -3 \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:17:23] [API] No se pudo ejecutar el parser Python. Revisa CP_PYTHON_BIN y el PATH de Windows. {"route":"/extract/anuncio","method":"POST","trace":"#0 C:\\xampp\\htdocs\\corredor_pro\\app\\api.php(57): cp_extract_from_announcement('\\xF0\\x9F\\x8F\\xA1\\xE2\\x9C\\xA8 SE ALQU...')\n#1 C:\\xampp\\htdocs\\corredor_pro\\public\\api.php(4): require_once('C:\\\\xampp\\\\htdocs...')\n#2 {main}"}
+[2026-03-26 21:26:43] [PARSER] Salida JSON inválida {"command":"\"python\" \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:26:43] [PARSER] Salida JSON inválida {"command":"python \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:26:43] [PARSER] Salida JSON inválida {"command":"py -3 \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 21:26:43] [PARSER] No se pudo ejecutar el parser Python. Revisa CP_PYTHON_BIN y el PATH de Windows. 
+[2026-03-26 22:16:02] [PARSER] Salida JSON inválida {"command":"\"python\" \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:16:02] [PARSER] Salida JSON inválida {"command":"python \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:16:02] [PARSER] Salida JSON inválida {"command":"py -3 \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:16:02] [PARSER] No se pudo ejecutar el parser Python. Revisa CP_PYTHON_BIN y el PATH de Windows. 
+[2026-03-26 22:16:09] [PARSER] Salida JSON inválida {"command":"\"python\" \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:16:10] [PARSER] Salida JSON inválida {"command":"python \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:16:10] [PARSER] Salida JSON inválida {"command":"py -3 \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:16:10] [PARSER] No se pudo ejecutar el parser Python. Revisa CP_PYTHON_BIN y el PATH de Windows. 
+[2026-03-26 22:17:15] [PARSER] Salida JSON inválida {"command":"\"python\" \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:17:15] [PARSER] Salida JSON inválida {"command":"python \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:17:15] [PARSER] Salida JSON inválida {"command":"py -3 \"C:\\xampp\\htdocs\\corredor_pro\\python\\parser_inmuebles.py\"","stdout":"","stderr":"","exit_code":0}
+[2026-03-26 22:17:15] [PARSER] No se pudo ejecutar el parser Python. Revisa CP_PYTHON_BIN y el PATH de Windows. 
+[2026-03-26 22:48:05] [PARSER] Python devolvió error en JSON {"error":"Parser failure: 'charmap' codec can't encode characters in position 1218-1219: character maps to <undefined>"}
+[2026-03-26 22:48:05] [PARSER] Python no disponible, usando extractor PHP 
+[2026-03-26 22:48:28] [PARSER] Python devolvió error en JSON {"error":"Parser failure: 'charmap' codec can't encode character '\\u0308' in position 19: character maps to <undefined>"}
+[2026-03-26 22:48:28] [PARSER] Python no disponible, usando extractor PHP 

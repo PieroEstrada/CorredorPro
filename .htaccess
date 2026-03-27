@@ -1,0 +1,13 @@
+RewriteEngine On
+RewriteBase /corredor_pro/
+
+# Archivos físicos existentes se sirven directamente (fotos, assets, etc.)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Rutas API → public/api.php
+RewriteRule ^api/(.*)$ public/api.php?route=/$1 [QSA,L]
+
+# Todo lo demás → frontend SPA
+RewriteRule ^ public/index.php [L]

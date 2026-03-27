@@ -1,0 +1,2944 @@
+<?php
+/**
+ * CorredorPro - CRM Inmobiliario
+ * Backend PHP + MySQL + Frontend JS
+ * Versión 1.0 - MySQL/XAMPP Edition
+ *
+ * ─── INSTRUCCIONES DE INSTALACIÓN EN XAMPP ───────────────────────────────────
+ *
+ * 1. Copia este archivo (index.php) a tu carpeta de XAMPP:
+ *    C:\\xampp\\htdocs\\corredor_pro\\index.php
+ *
+ * 2. Abre XAMPP y asegúrate de que Apache y MySQL estén corriendo (botón Start).
+ *c
+ * 3. La base de datos "corredor_pro" se crea AUTOMÁTICAMENTE la primera vez
+ *    que abras la aplicación. No necesitas crearla manualmente.
+ *
+ * 4. Accede desde el navegador:
+ *    http://localhost/corredor_pro/
+ *
+ * 5. Credenciales de prueba:
+ *    admin@corredor.pro  /  admin123     (Administrador)
+ *    carlos@corredor.pro /  carlos123    (Corredor 1)
+ *
+ * 6. Configuración de MySQL (si usas contraseña en XAMPP):
+ *    Edita las líneas define('DB_USER'...) y define('DB_PASS'...) abajo.
+ *    Por defecto XAMPP usa usuario "root" sin contraseña.
+ *
+ * 7. Para que funcione la extracción con IA (pegar anuncio), la llamada
+ *    a la API de Anthropic se hace desde el navegador del cliente.
+ *    No requiere configuración extra en el servidor.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+// ─── CONFIGURACIÓN MYSQL PARA XAMPP ─────────────────────────────────────────
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'lifeimmc_corredor_pro');
+define('DB_USER', 'lifeimmc_corredor_pro');
+define('DB_PASS', 'Corredor123#');
+define('UPLOAD_PATH', __DIR__ . '/uploads/');
+define('SECRET_KEY', 'cp_secret_2025_change_this');
+
+// ─── INICIALIZAR BASE DE DATOS ────────────────────────────────────────────────
+function getDB(): PDO {
+    static $db = null;
+    if ($db) return $db;
+    // Crear la base de datos automáticamente si no existe
+    $tmp = new PDO('mysql:host=' . DB_HOST . ';charset=utf8mb4', DB_USER, DB_PASS);
+    $tmp->exec('CREATE DATABASE IF NOT EXISTS `' . DB_NAME . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+    $tmp = null;
+    $db = new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4', DB_USER, DB_PASS);
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $db->exec("SET time_zone = '-05:00'");
+    //initSchema($db);
+    return $db;
+}
+
+function initSchema(PDO $db): void {
+    $db->exec("CREATE TABLE IF NOT EXISTS empresas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        activa INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS usuarios (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        empresa_id INTEGER DEFAULT 1,
+        nombre TEXT NOT NULL,
+        correo VARCHAR(191) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        rol TEXT DEFAULT 'corredor',
+        corredor_id INTEGER,
+        activo INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS propiedades (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        codigo VARCHAR(50) UNIQUE NOT NULL,
+        corredor_id INTEGER NOT NULL,
+        empresa_id INTEGER DEFAULT 1,
+        titulo TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        operacion TEXT NOT NULL,
+        estado TEXT DEFAULT 'Disponible',
+        precio DECIMAL(12,2) DEFAULT 0,
+        moneda TEXT DEFAULT 'S/',
+        distrito TEXT,
+        zona TEXT,
+        referencias TEXT,
+        piso INTEGER DEFAULT 1,
+        area DECIMAL(12,2) DEFAULT 0,
+        area_construida DECIMAL(12,2) DEFAULT 0,
+        frente DECIMAL(12,2),
+        fondo DECIMAL(12,2),
+        habitaciones INTEGER DEFAULT 0,
+        banos INTEGER DEFAULT 1,
+        medio_bano INTEGER DEFAULT 0,
+        sala INTEGER DEFAULT 0,
+        comedor INTEGER DEFAULT 0,
+        cocina INTEGER DEFAULT 0,
+        kitchenette INTEGER DEFAULT 0,
+        patio INTEGER DEFAULT 0,
+        jardin INTEGER DEFAULT 0,
+        balcon INTEGER DEFAULT 0,
+        terraza INTEGER DEFAULT 0,
+        lavanderia INTEGER DEFAULT 0,
+        tendedero INTEGER DEFAULT 0,
+        deposito INTEGER DEFAULT 0,
+        oficina_estudio INTEGER DEFAULT 0,
+        aire INTEGER DEFAULT 0,
+        ventilador INTEGER DEFAULT 0,
+        amoblado TEXT DEFAULT 'No',
+        closets INTEGER DEFAULT 0,
+        reservorio INTEGER DEFAULT 0,
+        agua_24h INTEGER DEFAULT 0,
+        cochera INTEGER DEFAULT 0,
+        tipo_cochera TEXT,
+        cantidad_vehiculos INTEGER DEFAULT 1,
+        seguridad_rejas INTEGER DEFAULT 0,
+        porton INTEGER DEFAULT 0,
+        internet INTEGER DEFAULT 0,
+        mantenimiento_incluido INTEGER DEFAULT 0,
+        agua_incluida INTEGER DEFAULT 0,
+        agua_monto DECIMAL(12,2) DEFAULT 0,
+        luz TEXT,
+        luz_monto DECIMAL(12,2) DEFAULT 0,
+        otros_servicios TEXT,
+        mascotas TEXT DEFAULT 'No especificado',
+        extranjeros INTEGER DEFAULT 0,
+        nacionalidades_aceptadas TEXT,
+        ninos TEXT DEFAULT 'No especificado',
+        mes_adelantado INTEGER DEFAULT 1,
+        mes_garantia INTEGER DEFAULT 1,
+        tiempo_minimo_contrato TEXT,
+        requisitos_adicionales TEXT,
+        descripcion TEXT,
+        observaciones_internas TEXT,
+        nombre_propietario TEXT,
+        tel_propietario TEXT,
+        estado_publicacion TEXT DEFAULT 'Borrador',
+        fecha_registro DATE NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS fotos_propiedades (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        propiedad_id INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        orden INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (propiedad_id) REFERENCES propiedades(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS prospectos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        codigo VARCHAR(50) UNIQUE NOT NULL,
+        corredor_id INTEGER NOT NULL,
+        empresa_id INTEGER DEFAULT 1,
+        nombre TEXT NOT NULL,
+        telefono TEXT,
+        whatsapp TEXT,
+        correo TEXT,
+        documento TEXT,
+        nacionalidad TEXT DEFAULT 'Peruana',
+        extranjero INTEGER DEFAULT 0,
+        fuente TEXT DEFAULT 'WhatsApp',
+        estado TEXT DEFAULT 'Nuevo',
+        motivo_descarte TEXT,
+        motivo_lista_negra TEXT,
+        observaciones TEXT,
+        ultimo_contacto TEXT,
+        proximo_seguimiento TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS requerimientos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        prospecto_id INTEGER NOT NULL,
+        operacion TEXT DEFAULT 'Alquiler',
+        tipo_inmueble TEXT,
+        presupuesto_min DECIMAL(12,2) DEFAULT 0,
+        presupuesto_max DECIMAL(12,2) DEFAULT 0,
+        moneda TEXT DEFAULT 'S/',
+        zonas TEXT,
+        referencias_ubicacion TEXT,
+        habitaciones_min INTEGER DEFAULT 1,
+        banos_min INTEGER DEFAULT 1,
+        cochera TEXT DEFAULT 'Indiferente',
+        tipo_vehiculo TEXT,
+        aire TEXT DEFAULT 'Indiferente',
+        mascotas TEXT DEFAULT 'Indiferente',
+        extranjero TEXT DEFAULT 'No',
+        servicios_deseados TEXT,
+        piso_deseado TEXT,
+        tiempo_mudanza TEXT,
+        prioridad TEXT DEFAULT 'Media',
+        estado TEXT DEFAULT 'Activo',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (prospecto_id) REFERENCES prospectos(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS citas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        corredor_id INTEGER NOT NULL,
+        empresa_id INTEGER DEFAULT 1,
+        titulo TEXT NOT NULL,
+        tipo TEXT DEFAULT 'Visita',
+        prospecto_id INTEGER,
+        propiedad_id INTEGER,
+        fecha TEXT NOT NULL,
+        hora TEXT,
+        duracion INTEGER DEFAULT 60,
+        ubicacion TEXT,
+        enlace_mapa TEXT,
+        notas TEXT,
+        estado TEXT DEFAULT 'Pendiente',
+        confirmado_cliente INTEGER DEFAULT 0,
+        resultado TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (prospecto_id) REFERENCES prospectos(id),
+        FOREIGN KEY (propiedad_id) REFERENCES propiedades(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS seguimientos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        corredor_id INTEGER NOT NULL,
+        prospecto_id INTEGER,
+        propiedad_id INTEGER,
+        tipo TEXT DEFAULT 'Llamada',
+        fecha DATE NULL,
+        nota TEXT,
+        resultado TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (prospecto_id) REFERENCES prospectos(id),
+        FOREIGN KEY (propiedad_id) REFERENCES propiedades(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS recordatorios (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        corredor_id INTEGER NOT NULL,
+        cita_id INTEGER,
+        prospecto_id INTEGER,
+        tipo TEXT DEFAULT 'cita',
+        mensaje TEXT,
+        fecha_envio TEXT,
+        estado TEXT DEFAULT 'Pendiente',
+        enviado_por TEXT DEFAULT 'manual',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (cita_id) REFERENCES citas(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS plantillas_whatsapp (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        empresa_id INTEGER DEFAULT 1,
+        nombre TEXT NOT NULL,
+        tipo TEXT,
+        contenido TEXT NOT NULL,
+        activa INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS historial_cambios (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        usuario_id INTEGER,
+        tabla TEXT,
+        registro_id INTEGER,
+        accion TEXT,
+        datos_anteriores TEXT,
+        datos_nuevos TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS matches_guardados (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        propiedad_id INTEGER NOT NULL,
+        prospecto_id INTEGER NOT NULL,
+        requerimiento_id INTEGER,
+        score INTEGER,
+        visto INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (propiedad_id) REFERENCES propiedades(id),
+        FOREIGN KEY (prospecto_id) REFERENCES prospectos(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Insertar datos demo si la BD está vacía
+    $count = $db->query("SELECT COUNT(*) as c FROM usuarios")->fetch()['c'];
+    if ($count == 0) {
+        seedDemo($db);
+    }
+}
+
+function seedDemo(PDO $db): void {
+    // Empresa
+    $db->exec("INSERT INTO empresas (nombre, slug) VALUES ('CorredorPro Demo', 'demo')");
+
+    // Usuarios
+    $users = [
+        [1, 'Admin CorredorPro', 'admin@corredor.pro', password_hash('admin123', PASSWORD_DEFAULT), 'admin', null],
+        [1, 'Carlos Mendoza', 'carlos@corredor.pro', password_hash('carlos123', PASSWORD_DEFAULT), 'corredor', 1],
+    ];
+    $stmt = $db->prepare("INSERT INTO usuarios (empresa_id, nombre, correo, password_hash, rol, corredor_id) VALUES (?,?,?,?,?,?)");
+    foreach ($users as $u) $stmt->execute($u);
+
+    // Propiedades
+    $props = [
+        ['P-001', 1, 'Departamento amplio 2do piso Callería', 'Departamento', 'Alquiler', 'Disponible', 950, 'S/', 'Callería', 'Urbanización Grau', 'Cerca al mercado central', 2, 65, 2, 1, 1, 1, 'Moto lineal', 'No especificado', 0, 0, 40, 'A consumo', 'No', 0, 'Sr. Flores', '965432100', 'Publicado', 'Departamento de estreno en segundo piso. Sala-comedor, cocina, 2 dormitorios, 1 baño. Cochera para moto lineal. Agua aparte S/40. Luz a consumo. Zona tranquila cerca al mercado.'],
+        ['P-002', 1, 'Casa familiar con cochera grande Manantay', 'Casa', 'Alquiler', 'Disponible', 1400, 'S/', 'Manantay', 'AA.HH. Nuevo Manantay', 'Cerca colegio San Juan', 1, 120, 3, 2, 1, 'Camioneta', 'Sí', 1, 1, 0, 'A consumo', 'Parcial', 1, 'Sra. Quispe', '978654321', 'Publicado', 'Casa amplia y cómoda con patio, jardín y cochera para camioneta. 3 dormitorios, 2 baños. Aire acondicionado. Internet wifi incluido. Agua incluida. Acepta mascotas pequeñas.'],
+        ['P-003', 2, 'Minidepartamento amoblado Pucallpa centro', 'Minidepartamento', 'Alquiler', 'Reservado', 650, 'S/', 'Callería', 'Jr. Ucayali', 'A 2 cuadras del parque', 3, 35, 1, 1, 0, null, 'No', 1, 0, 30, 'A consumo', 'Sí', 1, 'Sr. Pérez', '945678901', 'Publicado', 'Minidepartamento amoblado en tercer piso. 1 dormitorio, 1 baño, kitchenette. Internet wifi incluido. Agua S/30 aparte. Acepta extranjeros.'],
+        ['P-004', 1, 'Terreno comercial Av. Centenario', 'Terreno', 'Venta', 'Disponible', 85000, 'S/', 'Callería', 'Av. Centenario', 'Frente a grifo Repsol', 0, 200, 0, 0, 0, null, 'No especificado', 0, 0, 0, null, 'No', 0, 'Familia Arévalo', '912345678', 'Publicado', 'Terreno de 200m2 frente en Av. Centenario. Ideal para local comercial o edificio. Zona de alto tráfico. Documentos en regla.'],
+        ['P-005', 2, 'Departamento de estreno Av. Lloque Yupanqui', 'Departamento', 'Alquiler', 'Disponible', 1100, 'S/', 'Callería', 'Av. Lloque Yupanqui', 'Frente a plaza de armas', 4, 80, 2, 2, 1, 'Varios', 'No especificado', 0, 1, 30, 'A consumo', 'No', 1, 'Constructora NorOeste', '956789012', 'Publicado', 'Departamento de estreno en cuarto piso. Sala, comedor, cocina, 2 dormitorios, 2 baños. Cochera para camioneta o moto lineal. Internet wifi y cochera incluidos. Agua S/30. Aire acondicionado.'],
+    ];
+    $stmt = $db->prepare("INSERT INTO propiedades (codigo,corredor_id,titulo,tipo,operacion,estado,precio,moneda,distrito,zona,referencias,piso,area,habitaciones,banos,cochera,tipo_cochera,mascotas,extranjeros,agua_monto,luz,amoblado,internet,nombre_propietario,tel_propietario,estado_publicacion,descripcion) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    foreach ($props as $p) $stmt->execute($p);
+
+    // Prospectos
+    $prosp = [
+        ['C-001', 1, 'Rosa Huanca Rengifo', '962111222', '962111222', 'rosa.h@gmail.com', 'Peruana', 0, 'WhatsApp', 'Interesado', 'Busca urgente, libre el fin de semana para visitas', date('Y-m-d'), date('Y-m-d', strtotime('+2 days'))],
+        ['C-002', 1, 'Marco Antonio Ríos', '975333444', '975333444', '', 'Peruana', 0, 'Facebook', 'Visita agendada', 'Tiene auto, necesita cochera. Trabaja en banco.', date('Y-m-d', strtotime('-1 day')), date('Y-m-d', strtotime('+1 day'))],
+        ['C-003', 2, 'Jennifer Lozano Cruz', '987555666', '987555666', 'jlozano@outlook.com', 'Colombiana', 1, 'Referido', 'Contactado', 'Viene con familia, 2 niños. Busca casa o depa amplio', date('Y-m-d', strtotime('-2 days')), date('Y-m-d', strtotime('+3 days'))],
+        ['C-004', 1, 'Pedro Valdivia Soto', '911777888', '911777888', 'pedro.v@gmail.com', 'Peruana', 0, 'TikTok', 'Nuevo', 'Primer contacto por DM', date('Y-m-d'), date('Y-m-d', strtotime('+1 day'))],
+        ['C-005', 2, 'Carla Espinoza Vargas', '952888999', '952888999', '', 'Peruana', 0, 'Llamada', 'Descartado', 'Cerró contrato con otro corredor', date('Y-m-d', strtotime('-6 days')), null],
+    ];
+    $stmt = $db->prepare("INSERT INTO prospectos (codigo,corredor_id,nombre,telefono,whatsapp,correo,nacionalidad,extranjero,fuente,estado,observaciones,ultimo_contacto,proximo_seguimiento) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    foreach ($prosp as $p) $stmt->execute($p);
+
+    // Requerimientos
+    $reqs = [
+        [1, 'Alquiler', 'Departamento', 800, 1100, 'S/', 'Callería, Manantay', 2, 1, 'Indiferente', null, 'No', 'No', 'Activo'],
+        [1, 'Alquiler', 'Minidepartamento', 500, 750, 'S/', 'Callería centro', 1, 1, 'No', null, 'No', 'No', 'Activo'],
+        [2, 'Alquiler', 'Departamento', 900, 1300, 'S/', 'Callería, Av. Lloque Yupanqui', 2, 1, 'Sí', 'Auto', 'No', 'No', 'Activo'],
+        [3, 'Alquiler', 'Casa', 1200, 1800, 'S/', 'Manantay, Callería', 3, 2, 'Sí', 'Camioneta', 'Indiferente', 'Sí', 'Activo'],
+        [4, 'Alquiler', 'Cuarto', 300, 500, 'S/', 'Callería', 1, 1, 'No', null, 'No', 'No', 'Activo'],
+    ];
+    $stmt = $db->prepare("INSERT INTO requerimientos (prospecto_id,operacion,tipo_inmueble,presupuesto_min,presupuesto_max,moneda,zonas,habitaciones_min,banos_min,cochera,tipo_vehiculo,mascotas,extranjero,estado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    foreach ($reqs as $r) $stmt->execute($r);
+
+    // Citas
+    $citas = [
+        [1, 'Visita depa P-001', 'Visita', 2, 1, date('Y-m-d', strtotime('+2 days')), '10:00', 60, 'Jr. Tacna 234, Callería', 'Pendiente', 'Cliente llega en auto, verificar cochera moto lineal', 0],
+        [1, 'Visita casa P-002 - Rosa', 'Visita', 1, 2, date('Y-m-d', strtotime('+3 days')), '15:30', 90, 'AA.HH. Nuevo Manantay Mz. C Lt. 5', 'Confirmado', 'Cliente va con su esposo', 1],
+        [2, 'Seguimiento Jennifer', 'Llamada', 3, null, date('Y-m-d', strtotime('+3 days')), '09:00', 30, null, 'Pendiente', 'Confirmar si acepta la casa en Manantay', 0],
+    ];
+    $stmt = $db->prepare("INSERT INTO citas (corredor_id,titulo,tipo,prospecto_id,propiedad_id,fecha,hora,duracion,ubicacion,estado,notas,confirmado_cliente) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+    foreach ($citas as $c) $stmt->execute($c);
+
+    // Seguimientos
+    $segs = [
+        [1, 1, 1, 'Llamada', date('Y-m-d'), 'Cliente interesada, presupuesto hasta S/1100. Quiere ver el depa este fin de semana.'],
+        [1, 2, 5, 'WhatsApp', date('Y-m-d', strtotime('-1 day')), 'Se envió fotos del depa P-005. Le gustó el 4to piso. Confirmó visita para martes.'],
+        [2, 3, 2, 'Llamada', date('Y-m-d', strtotime('-2 days')), 'Primer contacto. Viene de Colombia. Busca casa con cochera para camioneta. Presupuesto hasta S/1800.'],
+    ];
+    $stmt = $db->prepare("INSERT INTO seguimientos (corredor_id,prospecto_id,propiedad_id,tipo,fecha,nota) VALUES (?,?,?,?,?,?)");
+    foreach ($segs as $s) $stmt->execute($s);
+
+    // Plantillas WhatsApp
+    $plantillas = [
+        [1, 'Confirmación de cita', 'confirmacion', 'Hola {{nombre}}, confirmamos tu {{tipo}} para el inmueble "{{predio}}" el día {{fecha}} a las {{hora}}. Ubicación: {{ubicacion}}. Por favor confirma tu asistencia respondiendo este mensaje. - CorredorPro'],
+        [1, 'Recordatorio de visita', 'recordatorio', 'Hola {{nombre}} 👋, te recordamos que mañana tienes una visita al inmueble "{{predio}}" a las {{hora}}. Dirección: {{ubicacion}}. ¿Todo bien para la visita? ✅'],
+        [1, 'Reprogramación', 'reprogramacion', 'Hola {{nombre}}, necesitamos reprogramar tu visita al inmueble "{{predio}}". ¿Cuándo te viene bien? Por favor respóndenos para coordinar una nueva fecha. Gracias.'],
+        [1, 'Post-visita', 'post_visita', 'Hola {{nombre}}, gracias por visitar el inmueble "{{predio}}" hoy. ¿Te gustó? Si tienes alguna duda o quieres ver otras opciones, estamos para ayudarte. ¡Saludos!'],
+    ];
+    $stmt = $db->prepare("INSERT INTO plantillas_whatsapp (empresa_id,nombre,tipo,contenido) VALUES (?,?,?,?)");
+    foreach ($plantillas as $p) $stmt->execute($p);
+}
+
+// ─── SESIONES Y AUTH ──────────────────────────────────────────────────────────
+session_start();
+
+function getCurrentUser(): ?array {
+    if (!isset($_SESSION['user_id'])) return null;
+    $db = getDB();
+    return $db->prepare("SELECT * FROM usuarios WHERE id=? AND activo=1")
+              ->execute([$_SESSION['user_id']]) ? 
+              $db->prepare("SELECT * FROM usuarios WHERE id=? AND activo=1")
+                 ->execute([$_SESSION['user_id']]) && false ? null :
+              (function() { 
+                  $db = getDB();
+                  $stmt = $db->prepare("SELECT * FROM usuarios WHERE id=? AND activo=1");
+                  $stmt->execute([$_SESSION['user_id']]);
+                  return $stmt->fetch() ?: null;
+              })() : null;
+}
+
+function requireAuth(): array {
+    // Re-fetch cleanly
+    if (!isset($_SESSION['user_id'])) {
+        jsonError('No autorizado', 401);
+    }
+    $db = getDB();
+    $stmt = $db->prepare("SELECT * FROM usuarios WHERE id=? AND activo=1");
+    $stmt->execute([$_SESSION['user_id']]);
+    $user = $stmt->fetch();
+    if (!$user) jsonError('Sesión expirada', 401);
+    return $user;
+}
+
+function requireAdmin(): array {
+    $user = requireAuth();
+    if ($user['rol'] !== 'admin') jsonError('Sin permisos de administrador', 403);
+    return $user;
+}
+
+function scopeQuery(array $user): string {
+    if ($user['rol'] === 'admin') return '';
+    return " AND corredor_id = " . intval($user['corredor_id']);
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function json(mixed $data, int $code = 200): never {
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+function jsonError(string $msg, int $code = 400): never {
+    json(['error' => $msg], $code);
+}
+function body(): array {
+    return json_decode(file_get_contents('php://input'), true) ?? [];
+}
+function nextCode(PDO $db, string $tabla, string $campo, string $prefix): string {
+    $stmt = $db->query("SELECT MAX(CAST(SUBSTRING($campo, " . (strlen($prefix)+2) . ") AS INTEGER)) as m FROM $tabla");
+    $max = $stmt->fetch()['m'] ?? 0;
+    return $prefix . '-' . str_pad($max + 1, 3, '0', STR_PAD_LEFT);
+}
+
+// ─── MATCHING ENGINE PHP ──────────────────────────────────────────────────────
+function normalizeText($text) {
+    if (class_exists('Normalizer')) {
+        $text = Normalizer::normalize($text, Normalizer::FORM_KD);
+    }
+
+    $text = preg_replace('/\p{Mn}+/u', '', $text); // quita marcas/accentos
+    $text = mb_strtolower($text, 'UTF-8');
+
+    $replacements = [
+        'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ñ'=>'n',
+        'Á'=>'a','É'=>'a','Í'=>'i','Ó'=>'o','Ú'=>'u','Ñ'=>'n',
+        'º'=>' ','°'=>' '
+    ];
+    $text = strtr($text, $replacements);
+
+    $text = preg_replace('/[[:space:]]+/u', ' ', $text);
+    return trim($text);
+}
+
+function containsAny($text, $patterns) {
+    foreach ($patterns as $p) {
+        if (preg_match($p, $text)) return true;
+    }
+    return false;
+}
+
+function firstMatch($pattern, $text, $group = 1) {
+    if (preg_match($pattern, $text, $m)) {
+        return isset($m[$group]) ? trim($m[$group]) : trim($m[0]);
+    }
+    return null;
+}
+
+function numFromText($value) {
+    if ($value === null) return null;
+    $value = trim(mb_strtolower($value, 'UTF-8'));
+    $map = [
+        'un'=>1,'uno'=>1,'una'=>1,
+        'dos'=>2,'tres'=>3,'cuatro'=>4,'cinco'=>5,
+        'seis'=>6,'siete'=>7,'ocho'=>8,'nueve'=>9,'diez'=>10
+    ];
+    if (isset($map[$value])) return $map[$value];
+    if (preg_match('/\d+/', $value, $m)) return (int)$m[0];
+    return null;
+}
+
+function moneyToNumber($value) {
+    if ($value === null) return null;
+    $value = str_replace(['.', ' '], '', $value);
+    $value = str_replace(',', '.', $value);
+    if (!is_numeric($value)) return null;
+    return (float)$value;
+}
+
+function detectTipoInmueble($t) {
+    if (preg_match('/minidepartamento/', $t)) return 'Minidepartamento';
+    if (preg_match('/departamento/', $t)) return 'Departamento';
+    if (preg_match('/cuarto|habitacion/', $t)) return 'Cuarto';
+    if (preg_match('/casa/', $t)) return 'Casa';
+    if (preg_match('/terreno|lote/', $t)) return 'Terreno';
+    if (preg_match('/oficina/', $t)) return 'Oficina';
+    if (preg_match('/local/', $t)) return 'Local';
+    return 'Otros';
+}
+
+function detectOperacion($t) {
+    if (preg_match('/alquilo|alquiler|se alquila|en alquiler/', $t)) return 'Alquiler';
+    if (preg_match('/vendo|venta|se vende|en venta/', $t)) return 'Venta';
+    return null;
+}
+
+function detectMoneda($rawText) {
+    if (preg_match('/usd|\$|dolares|dólares/i', $rawText)) return '$';
+    return 'S/';
+}
+
+function detectPrecio($rawText) {
+    $t = normalizeText($rawText);
+
+    $patterns = [
+        '/precio\s*[:\-]?\s*(?:s\/\s*)?(\d{2,6}(?:[.,]\d{1,2})?)/u',
+        '/tarifa mensual\s*[:\-]?\s*(?:s\/\s*)?(\d{2,6}(?:[.,]\d{1,2})?)/u',
+        '/solo\s*(?:s\/\s*)?(\d{2,6}(?:[.,]\d{1,2})?)/u',
+        '/(?:en|por)\s*(?:s\/\s*)?(\d{2,6}(?:[.,]\d{1,2})?)\s*soles/u',
+        '/(?:s\/|\$)\s*(\d{2,6}(?:[.,]\d{1,2})?)/u',
+        '/(\d{2,6}(?:[.,]\d{1,2})?)\s*soles/u'
+    ];
+
+    foreach ($patterns as $p) {
+        if (preg_match($p, $t, $m)) {
+            return moneyToNumber($m[1]);
+        }
+    }
+
+    return null;
+}
+
+function detectPiso($t) {
+    $t = normalizeText($t);
+
+    $map = [
+        '/primer piso|1er piso|1ro piso|1 piso/' => 1,
+        '/segundo piso|2do piso|2 piso/' => 2,
+        '/tercer piso|3er piso|3 piso/' => 3,
+        '/cuarto piso|4to piso|4 piso/' => 4,
+        '/quinto piso|5to piso|5 piso/' => 5,
+    ];
+
+    foreach ($map as $p => $n) {
+        if (preg_match($p, $t)) return $n;
+    }
+
+    return null;
+}
+
+function detectHabitaciones($t) {
+    $v = firstMatch('/(\d+|uno|una|dos|tres|cuatro|cinco)\s*(habitaciones|habitacion|dormitorios|dormitorio)/', $t);
+    return numFromText($v);
+}
+
+function detectBanos($t) {
+    $v = firstMatch('/(\d+|uno|una|dos|tres|cuatro)\s*(banos|bano|baños|baño|servicios higienicos|servicio higienico)/u', $t);
+    if ($v !== null) return numFromText($v);
+    if (preg_match('/bano completo|baño completo/u', $t)) return 1;
+    return null;
+}
+
+function detectCochera($t) {
+    if (preg_match('/cochera|garage|garaje|estacionamiento/', $t)) return true;
+    return false;
+}
+
+function detectTipoCochera($t) {
+    $t = normalizeText($t);
+    $tipos = [];
+
+    if (preg_match('/moto lineal|\bmoto\b/', $t)) $tipos[] = 'Moto lineal';
+    if (preg_match('/motocar/', $t)) $tipos[] = 'Motocar';
+    if (preg_match('/camioneta/', $t)) $tipos[] = 'Camioneta';
+    if (preg_match('/auto|carro/', $t)) $tipos[] = 'Auto';
+
+    $tipos = array_values(array_unique($tipos));
+
+    if (!$tipos && preg_match('/cochera|garage|garaje|estacionamiento/', $t)) {
+        return 'No especificado';
+    }
+
+    if (count($tipos) > 1) return 'Varios';
+    return $tipos[0] ?? null;
+}
+
+function detectCantidadVehiculos($t) {
+    $v = firstMatch('/para\s*(\d+)\s*(camionetas|autos|carros|motos|vehiculos)/', $t);
+    return $v ? (int)$v : null;
+}
+
+function detectSiNo($t, $yesPatterns, $noPatterns, $default = null) {
+    if (containsAny($t, $noPatterns)) return false;
+    if (containsAny($t, $yesPatterns)) return true;
+    return $default;
+}
+
+function detectMascotas($t) {
+    if (preg_match('/no se aceptan mascotas|no aceptan mascotas|sin mascotas/', $t)) return 'No';
+    if (preg_match('/acepta mascotas|mascotas permitidas|pet friendly/', $t)) return 'Sí';
+    return 'No especificado';
+}
+
+function detectExtranjeros($t) {
+    if (preg_match('/acepta extranjeros|se aceptan extranjeros|extranjeros permitidos/', $t)) return true;
+    if (preg_match('/no se aceptan extranjeros|no aceptan extranjeros|solo peruanos/', $t)) return false;
+    return false;
+}
+
+function detectAgua($rawText, $t) {
+    $incluida = null;
+    $monto = null;
+
+    if (preg_match('/agua.*incluid|incluye agua|agua y .* incluid/', $t)) $incluida = true;
+    if (preg_match('/agua[:\s]*(\d+[\.,]?\d*)\s*soles/u', $rawText, $m)) {
+        $incluida = false;
+        $monto = moneyToNumber($m[1]);
+    }
+
+    return [$incluida, $monto];
+}
+
+function detectLuz($rawText, $t) {
+    if (preg_match('/luz.*a consumo|medidor propio.*consumo/', $t)) return 'A consumo';
+    if (preg_match('/luz.*incluid|incluye luz/', $t)) return 'Incluida';
+    if (preg_match('/luz[:\s]*(\d+[\.,]?\d*)\s*soles/u', $rawText)) return 'Monto fijo';
+    return null;
+}
+
+function detectUbicacion($rawText) {
+    $t = normalizeText($rawText);
+
+    if (preg_match('/ubicad[oa]\s+en\s+(.+?)(?=, este|\.|\\n|\\r|$)/u', $t, $m)) {
+        return trim($m[1]);
+    }
+
+    if (preg_match('/ubicacion\s*[:\-]?\s*(.+?)(?=\.|\\n|\\r|$)/u', $t, $m)) {
+        return trim($m[1]);
+    }
+
+    return null;
+}
+
+function detectReferencias($rawText) {
+    $refs = [];
+    if (preg_match('/frente a\s+(.+?)(?:\.|\n|,)/iu', $rawText, $m)) $refs[] = 'Frente a ' . trim($m[1]);
+    if (preg_match('/cerca a\s+(.+?)(?:\.|\n|,)/iu', $rawText, $m)) $refs[] = 'Cerca a ' . trim($m[1]);
+    if (preg_match('/cerca al\s+(.+?)(?:\.|\n|,)/iu', $rawText, $m)) $refs[] = 'Cerca al ' . trim($m[1]);
+    if (preg_match('/a media cuadra de\s+(.+?)(?:\.|\n|,)/iu', $rawText, $m)) $refs[] = 'A media cuadra de ' . trim($m[1]);
+    return $refs ? implode(' | ', array_unique($refs)) : null;
+}
+
+function detectCondiciones($rawText, $t) {
+    $adelanto = firstMatch('/(\d+)\s*mes(?:es)?\s*(?:de )?(?:alquiler )?adelantado/', $t);
+    $garantia = firstMatch('/(\d+)\s*mes(?:es)?\s*(?:de )?garantia/u', $t);
+    $contrato = firstMatch('/contrato\s*(?:por|minimo de)?\s*([\d]+\s*(?:ano|años|meses|año|mes))/u', $t, 1);
+
+    return [
+        'mes_adelantado' => $adelanto ? (int)$adelanto : null,
+        'mes_garantia' => $garantia ? (int)$garantia : null,
+        'contrato_minimo' => $contrato
+    ];
+}
+
+function extractPropertyData($rawText) {
+    $t = normalizeText($rawText);
+
+    [$aguaIncluida, $aguaMonto] = detectAgua($rawText, $t);
+    $ubicacion = detectUbicacion($rawText);
+    $referencias = detectReferencias($rawText);
+
+    $result = [
+        'titulo' => null,
+        'tipo' => detectTipoInmueble($t),
+        'operacion' => detectOperacion($t),
+        'precio' => detectPrecio($rawText),
+        'moneda' => detectMoneda($rawText),
+        'piso' => detectPiso($t),
+        'area' => null,
+        'habitaciones' => detectHabitaciones($t),
+        'banos' => detectBanos($t),
+
+        'cochera' => detectCochera($t),
+        'tipo_cochera' => detectTipoCochera($t),
+        'cantidad_vehiculos' => detectCantidadVehiculos($t),
+
+        'aire' => preg_match('/aire acondicionado/', $t) ? true : false,
+        'aire_acondicionado' => preg_match('/aire acondicionado/', $t) ? true : false,
+
+        'amoblado' => preg_match('/amoblad[oa]/', $t) ? 'Sí' : null,
+        'lavanderia' => preg_match('/lavadora|lavanderia|lavatorio/', $t) ? true : false,
+        'tendedero' => preg_match('/tendedero/', $t) ? true : false,
+        'patio' => preg_match('/patio/', $t) ? true : false,
+        'jardin' => preg_match('/jardin/', $t) ? true : false,
+        'oficina' => preg_match('/oficina|estudio/', $t) ? true : false,
+
+        'internet' => preg_match('/internet.*inclu|wifi.*inclu|incluye internet|incluye wifi/', $t) ? true : false,
+        'internet_incluido' => preg_match('/internet.*inclu|wifi.*inclu|incluye internet|incluye wifi/', $t) ? true : false,
+
+        'mantenimiento_incluido' => preg_match('/mantenimiento.*incluid/', $t) ? true : false,
+        'agua_incluida' => $aguaIncluida,
+        'agua_monto' => $aguaMonto,
+        'luz' => detectLuz($rawText, $t),
+
+        'mascotas' => detectMascotas($t),
+        'extranjeros' => detectExtranjeros($t),
+
+        'ubicacion' => $ubicacion,
+        'zona' => $ubicacion,
+        'distrito' => null,
+        'referencias' => $referencias,
+
+        'condiciones' => detectCondiciones($rawText, $t),
+        'descripcion' => trim($rawText),
+
+        'confianza' => [
+            'tipo' => detectTipoInmueble($t) !== 'Otros' ? 'alta' : 'baja',
+            'operacion' => detectOperacion($t) ? 'alta' : 'baja',
+            'precio' => detectPrecio($rawText) ? 'alta' : 'baja',
+            'habitaciones' => detectHabitaciones($t) ? 'alta' : 'media',
+            'banos' => detectBanos($t) ? 'alta' : 'media',
+            'cochera' => preg_match('/cochera|garage|garaje|estacionamiento/', $t) ? 'alta' : 'baja',
+            'ubicacion' => ($ubicacion || $referencias) ? 'media' : 'baja'
+        ]
+    ];
+
+    $faltantes = [];
+    foreach (['operacion','precio','tipo','habitaciones','banos'] as $campo) {
+        if ($result[$campo] === null || $result[$campo] === 'Otros') $faltantes[] = $campo;
+    }
+    $result['faltantes'] = $faltantes;
+
+    return $result;
+}
+
+// ─── ROUTER ───────────────────────────────────────────────────────────────────
+$method = $_SERVER['REQUEST_METHOD'];
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$base = dirname($_SERVER['SCRIPT_NAME']);
+$path = '/' . ltrim(substr($uri, strlen($base)), '/');
+
+// Inicializar BD siempre
+try { getDB(); } catch (Exception $e) { die('Error BD: ' . $e->getMessage()); }
+
+// ─── API ROUTES ───────────────────────────────────────────────────────────────
+if (str_starts_with($path, '/api/')) {
+    header('Content-Type: application/json');
+
+    // ── AUTH ──
+    if ($path === '/api/auth/login' && $method === 'POST') {
+        $data = body();
+        $db = getDB();
+        $stmt = $db->prepare("SELECT * FROM usuarios WHERE (correo=? OR nombre=?) AND activo=1");
+        $stmt->execute([$data['correo'] ?? '', $data['correo'] ?? '']);
+        $user = $stmt->fetch();
+        if ($user && password_verify($data['password'] ?? '', $user['password_hash'])) {
+            $_SESSION['user_id'] = $user['id'];
+            unset($user['password_hash']);
+            json(['ok' => true, 'user' => $user]);
+        }
+        jsonError('Credenciales incorrectas');
+    }
+
+    if ($path === '/api/auth/logout' && $method === 'POST') {
+        session_destroy();
+        json(['ok' => true]);
+    }
+
+    if ($path === '/api/auth/me' && $method === 'GET') {
+        $user = requireAuth();
+        unset($user['password_hash']);
+        json($user);
+    }
+
+    // ── PROPIEDADES ──
+    if ($path === '/api/propiedades' && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $scope = scopeQuery($user);
+        $where = "WHERE 1=1 $scope";
+        if (!empty($_GET['tipo'])) $where .= " AND tipo=" . $db->quote($_GET['tipo']);
+        if (!empty($_GET['operacion'])) $where .= " AND operacion=" . $db->quote($_GET['operacion']);
+        if (!empty($_GET['estado'])) $where .= " AND estado=" . $db->quote($_GET['estado']);
+        if (!empty($_GET['zona'])) $where .= " AND (zona LIKE " . $db->quote('%'.$_GET['zona'].'%') . " OR distrito LIKE " . $db->quote('%'.$_GET['zona'].'%') . ")";
+        $props = $db->query("SELECT * FROM propiedades $where ORDER BY id DESC")->fetchAll();
+        json($props);
+    }
+
+    if ($path === '/api/propiedades' && $method === 'POST') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $codigo = nextCode($db, 'propiedades', 'codigo', 'P');
+        $fields = ['codigo','corredor_id','empresa_id','titulo','tipo','operacion','estado','precio','moneda','distrito','zona','referencias','piso','area','habitaciones','banos','cochera','tipo_cochera','mascotas','extranjeros','agua_incluida','agua_monto','luz','internet','amoblado','aire','mantenimiento_incluido','descripcion','observaciones_internas','nombre_propietario','tel_propietario','estado_publicacion','patio','jardin','balcon','lavanderia','tendedero'];
+        $data['codigo'] = $codigo;
+        $data['corredor_id'] = $user['corredor_id'] ?? $user['id'];
+        $data['empresa_id'] = $user['empresa_id'] ?? 1;
+        $cols = implode(',', $fields);
+        $phs = implode(',', array_fill(0, count($fields), '?'));
+        $vals = array_map(fn($f) => $data[$f] ?? null, $fields);
+        $db->prepare("INSERT INTO propiedades ($cols) VALUES ($phs)")->execute($vals);
+        $id = $db->lastInsertId();
+        $prop = $db->query("SELECT * FROM propiedades WHERE id=$id")->fetch();
+        // Calcular matches automáticos
+        computeMatchesForProp($db, $prop);
+        json(['ok' => true, 'id' => $id, 'codigo' => $codigo, 'prop' => $prop]);
+    }
+
+    if (preg_match('#^/api/propiedades/(\d+)$#', $path, $m) && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $prop = $db->query("SELECT * FROM propiedades WHERE id={$m[1]}")->fetch();
+        if (!$prop) jsonError('No encontrado', 404);
+        json($prop);
+    }
+
+    if (preg_match('#^/api/propiedades/(\d+)$#', $path, $m) && $method === 'PUT') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $allowed = ['titulo','tipo','operacion','estado','precio','moneda','distrito','zona','referencias','piso','area','habitaciones','banos','cochera','tipo_cochera','mascotas','extranjeros','agua_incluida','agua_monto','luz','internet','amoblado','aire','mantenimiento_incluido','descripcion','observaciones_internas','nombre_propietario','tel_propietario','estado_publicacion','patio','jardin','lavanderia'];
+        $sets = []; $vals = [];
+        foreach ($allowed as $f) { if (isset($data[$f])) { $sets[] = "$f=?"; $vals[] = $data[$f]; } }
+        $sets[] = "updated_at=NOW()";
+        $vals[] = $m[1];
+        $db->prepare("UPDATE propiedades SET " . implode(',', $sets) . " WHERE id=?")->execute($vals);
+        json(['ok' => true]);
+    }
+
+    if (preg_match('#^/api/propiedades/(\d+)$#', $path, $m) && $method === 'DELETE') {
+        $user = requireAuth();
+        $db = getDB();
+        $db->prepare("UPDATE propiedades SET estado='Inactivo' WHERE id=?")->execute([$m[1]]);
+        json(['ok' => true]);
+    }
+
+    // ── PROSPECTOS ──
+    if ($path === '/api/prospectos' && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $scope = scopeQuery($user);
+        $where = "WHERE 1=1 $scope";
+        if (!empty($_GET['estado'])) $where .= " AND estado=" . $db->quote($_GET['estado']);
+        if (!empty($_GET['fuente'])) $where .= " AND fuente=" . $db->quote($_GET['fuente']);
+        if (!empty($_GET['q'])) $where .= " AND (nombre LIKE " . $db->quote('%'.$_GET['q'].'%') . " OR telefono LIKE " . $db->quote('%'.$_GET['q'].'%') . ")";
+        $prosp = $db->query("SELECT * FROM prospectos $where ORDER BY id DESC")->fetchAll();
+        json($prosp);
+    }
+
+    if ($path === '/api/prospectos' && $method === 'POST') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $codigo = nextCode($db, 'prospectos', 'codigo', 'C');
+        $fields = ['codigo','corredor_id','empresa_id','nombre','telefono','whatsapp','correo','documento','nacionalidad','extranjero','fuente','estado','observaciones','ultimo_contacto','proximo_seguimiento'];
+        $data['codigo'] = $codigo;
+        $data['corredor_id'] = $user['corredor_id'] ?? $user['id'];
+        $data['empresa_id'] = $user['empresa_id'] ?? 1;
+        $data['ultimo_contacto'] = $data['ultimo_contacto'] ?? date('Y-m-d');
+        $cols = implode(',', $fields);
+        $phs = implode(',', array_fill(0, count($fields), '?'));
+        $vals = array_map(fn($f) => $data[$f] ?? null, $fields);
+        $db->prepare("INSERT INTO prospectos ($cols) VALUES ($phs)")->execute($vals);
+        $id = $db->lastInsertId();
+        // Guardar requerimiento si viene
+        if (!empty($data['requerimiento'])) {
+            $req = $data['requerimiento'];
+            $req['prospecto_id'] = $id;
+            $rfields = ['prospecto_id','operacion','tipo_inmueble','presupuesto_min','presupuesto_max','moneda','zonas','habitaciones_min','banos_min','cochera','tipo_vehiculo','mascotas','extranjero','estado'];
+            $rcols = implode(',', $rfields);
+            $rphs = implode(',', array_fill(0, count($rfields), '?'));
+            $rvals = array_map(fn($f) => $req[$f] ?? null, $rfields);
+            $db->prepare("INSERT INTO requerimientos ($rcols) VALUES ($rphs)")->execute($rvals);
+        }
+        json(['ok' => true, 'id' => $id, 'codigo' => $codigo]);
+    }
+
+    if (preg_match('#^/api/prospectos/(\d+)$#', $path, $m) && $method === 'PUT') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $allowed = ['nombre','telefono','whatsapp','correo','nacionalidad','extranjero','fuente','estado','motivo_descarte','motivo_lista_negra','observaciones','ultimo_contacto','proximo_seguimiento'];
+        $sets = []; $vals = [];
+        foreach ($allowed as $f) { if (array_key_exists($f, $data)) { $sets[] = "$f=?"; $vals[] = $data[$f]; } }
+        $sets[] = "updated_at=NOW()";
+        $vals[] = $m[1];
+        $db->prepare("UPDATE prospectos SET " . implode(',', $sets) . " WHERE id=?")->execute($vals);
+        json(['ok' => true]);
+    }
+
+    // ── REQUERIMIENTOS ──
+    if (preg_match('#^/api/prospectos/(\d+)/requerimientos$#', $path, $m) && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $reqs = $db->query("SELECT * FROM requerimientos WHERE prospecto_id={$m[1]} ORDER BY id DESC")->fetchAll();
+        json($reqs);
+    }
+
+    if (preg_match('#^/api/prospectos/(\d+)/requerimientos$#', $path, $m) && $method === 'POST') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $data['prospecto_id'] = $m[1];
+        $fields = ['prospecto_id','operacion','tipo_inmueble','presupuesto_min','presupuesto_max','moneda','zonas','habitaciones_min','banos_min','cochera','tipo_vehiculo','mascotas','extranjero','estado'];
+        $cols = implode(',', $fields);
+        $phs = implode(',', array_fill(0, count($fields), '?'));
+        $vals = array_map(fn($f) => $data[$f] ?? null, $fields);
+        $db->prepare("INSERT INTO requerimientos ($cols) VALUES ($phs)")->execute($vals);
+        json(['ok' => true, 'id' => $db->lastInsertId()]);
+    }
+
+    // ── CITAS ──
+    if ($path === '/api/citas' && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $scope = scopeQuery($user);
+        $where = "WHERE 1=1 $scope";
+        if (!empty($_GET['estado'])) $where .= " AND estado=" . $db->quote($_GET['estado']);
+        if (!empty($_GET['fecha_desde'])) $where .= " AND fecha>=" . $db->quote($_GET['fecha_desde']);
+        if (!empty($_GET['fecha_hasta'])) $where .= " AND fecha<=" . $db->quote($_GET['fecha_hasta']);
+        $citas = $db->query("SELECT c.*, p.nombre as prospecto_nombre, p.whatsapp as prospecto_wa, pr.titulo as propiedad_titulo, pr.codigo as propiedad_codigo FROM citas c LEFT JOIN prospectos p ON p.id=c.prospecto_id LEFT JOIN propiedades pr ON pr.id=c.propiedad_id $where ORDER BY fecha ASC, hora ASC")->fetchAll();
+        json($citas);
+    }
+
+    if ($path === '/api/citas' && $method === 'POST') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $fields = ['corredor_id','empresa_id','titulo','tipo','prospecto_id','propiedad_id','fecha','hora','duracion','ubicacion','enlace_mapa','notas','estado','confirmado_cliente'];
+        $data['corredor_id'] = $user['corredor_id'] ?? $user['id'];
+        $data['empresa_id'] = $user['empresa_id'] ?? 1;
+        $cols = implode(',', $fields);
+        $phs = implode(',', array_fill(0, count($fields), '?'));
+        $vals = array_map(fn($f) => $data[$f] ?? null, $fields);
+        $db->prepare("INSERT INTO citas ($cols) VALUES ($phs)")->execute($vals);
+        json(['ok' => true, 'id' => $db->lastInsertId()]);
+    }
+
+    if (preg_match('#^/api/citas/(\d+)$#', $path, $m) && $method === 'PUT') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $allowed = ['titulo','tipo','prospecto_id','propiedad_id','fecha','hora','duracion','ubicacion','notas','estado','confirmado_cliente','resultado'];
+        $sets = []; $vals = [];
+        foreach ($allowed as $f) { if (array_key_exists($f, $data)) { $sets[] = "$f=?"; $vals[] = $data[$f]; } }
+        $sets[] = "updated_at=NOW()";
+        $vals[] = $m[1];
+        $db->prepare("UPDATE citas SET " . implode(',', $sets) . " WHERE id=?")->execute($vals);
+        json(['ok' => true]);
+    }
+
+    // ── SEGUIMIENTOS ──
+    if ($path === '/api/seguimientos' && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $scope = scopeQuery($user);
+        $where = "WHERE 1=1 $scope";
+        if (!empty($_GET['prospecto_id'])) $where .= " AND s.prospecto_id=" . intval($_GET['prospecto_id']);
+        $segs = $db->query("SELECT s.*, p.nombre as prospecto_nombre, pr.titulo as propiedad_titulo, pr.codigo as propiedad_codigo FROM seguimientos s LEFT JOIN prospectos p ON p.id=s.prospecto_id LEFT JOIN propiedades pr ON pr.id=s.propiedad_id $where ORDER BY fecha DESC, id DESC")->fetchAll();
+        json($segs);
+    }
+
+    if ($path === '/api/seguimientos' && $method === 'POST') {
+        $user = requireAuth();
+        $data = body();
+        $db = getDB();
+        $fields = ['corredor_id','prospecto_id','propiedad_id','tipo','fecha','nota','resultado'];
+        $data['corredor_id'] = $user['corredor_id'] ?? $user['id'];
+        $data['fecha'] = $data['fecha'] ?? date('Y-m-d');
+        $cols = implode(',', $fields);
+        $phs = implode(',', array_fill(0, count($fields), '?'));
+        $vals = array_map(fn($f) => $data[$f] ?? null, $fields);
+        $db->prepare("INSERT INTO seguimientos ($cols) VALUES ($phs)")->execute($vals);
+        // Actualizar último contacto del prospecto
+        if (!empty($data['prospecto_id'])) {
+            $db->prepare("UPDATE prospectos SET ultimo_contacto=? WHERE id=?")->execute([$data['fecha'], $data['prospecto_id']]);
+        }
+        json(['ok' => true, 'id' => $db->lastInsertId()]);
+    }
+
+    // ── MATCHING ──
+    if ($path === '/api/matching' && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $scope = scopeQuery($user);
+        $minScore = intval($_GET['min'] ?? 40);
+        $props = $db->query("SELECT * FROM propiedades WHERE estado='Disponible' $scope")->fetchAll();
+        $prospectos = $db->query("SELECT * FROM prospectos WHERE estado NOT IN ('Lista negra','Descartado','Cerrado') $scope")->fetchAll();
+        $reqs = $db->query("SELECT * FROM requerimientos WHERE estado='Activo'")->fetchAll();
+        $matches = [];
+        foreach ($props as $prop) {
+            foreach ($prospectos as $prosp) {
+                $prospReqs = array_filter($reqs, fn($r) => $r['prospecto_id'] == $prosp['id']);
+                foreach ($prospReqs as $req) {
+                    $m = calcMatch($prop, $req, $prosp);
+                    if ($m && $m['score'] >= $minScore) {
+                        $matches[] = array_merge($m, [
+                            'prop_id' => $prop['id'], 'prop_codigo' => $prop['codigo'],
+                            'prop_titulo' => $prop['titulo'], 'prop_precio' => $prop['precio'],
+                            'prop_moneda' => $prop['moneda'], 'prop_zona' => $prop['zona'],
+                            'prop_tipo' => $prop['tipo'],
+                            'prosp_id' => $prosp['id'], 'prosp_nombre' => $prosp['nombre'],
+                            'prosp_telefono' => $prosp['telefono'], 'prosp_whatsapp' => $prosp['whatsapp'],
+                            'req_id' => $req['id'], 'req_tipo' => $req['tipo_inmueble'],
+                            'req_zonas' => $req['zonas'],
+                        ]);
+                    }
+                }
+            }
+        }
+        usort($matches, fn($a,$b) => $b['score'] - $a['score']);
+        json($matches);
+    }
+
+    if (preg_match('#^/api/matching/propiedad/(\d+)$#', $path, $m) && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $prop = $db->query("SELECT * FROM propiedades WHERE id={$m[1]}")->fetch();
+        if (!$prop) jsonError('No encontrado', 404);
+        $prospectos = $db->query("SELECT * FROM prospectos WHERE estado NOT IN ('Lista negra','Descartado','Cerrado')")->fetchAll();
+        $reqs = $db->query("SELECT * FROM requerimientos WHERE estado='Activo'")->fetchAll();
+        $matches = [];
+        foreach ($prospectos as $prosp) {
+            $prospReqs = array_filter($reqs, fn($r) => $r['prospecto_id'] == $prosp['id']);
+            foreach ($prospReqs as $req) {
+                $result = calcMatch($prop, $req, $prosp);
+                if ($result && $result['score'] >= 30) {
+                    $matches[] = array_merge($result, ['prosp' => $prosp, 'req' => $req]);
+                }
+            }
+        }
+        usort($matches, fn($a,$b) => $b['score'] - $a['score']);
+        json($matches);
+    }
+
+    if (preg_match('#^/api/matching/prospecto/(\d+)$#', $path, $m) && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $prosp = $db->query("SELECT * FROM prospectos WHERE id={$m[1]}")->fetch();
+        if (!$prosp) jsonError('No encontrado', 404);
+        $reqs = $db->query("SELECT * FROM requerimientos WHERE prospecto_id={$m[1]} AND estado='Activo'")->fetchAll();
+        $props = $db->query("SELECT * FROM propiedades WHERE estado='Disponible'")->fetchAll();
+        $matches = [];
+        foreach ($props as $prop) {
+            foreach ($reqs as $req) {
+                $result = calcMatch($prop, $req, $prosp);
+                if ($result && $result['score'] >= 30) {
+                    $matches[] = array_merge($result, ['prop' => $prop, 'req' => $req]);
+                }
+            }
+        }
+        usort($matches, fn($a,$b) => $b['score'] - $a['score']);
+        json($matches);
+    }
+
+    if ($path === '/api/extract/anuncio' && $method === 'POST') {
+      requireAuth();
+      $data = body();
+      $text = trim($data['text'] ?? '');
+
+      if ($text === '') {
+          jsonError('Texto requerido', 422);
+      }
+
+      json(extractPropertyData($text));
+  }
+
+    // ── DASHBOARD ──
+    if ($path === '/api/dashboard' && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $scope = scopeQuery($user);
+        $today = date('Y-m-d');
+        $stats = [
+            'props_disponibles' => $db->query("SELECT COUNT(*) FROM propiedades WHERE estado='Disponible' $scope")->fetchColumn(),
+            'props_alquiladas' => $db->query("SELECT COUNT(*) FROM propiedades WHERE estado='Alquilado' $scope")->fetchColumn(),
+            'props_vendidas' => $db->query("SELECT COUNT(*) FROM propiedades WHERE estado='Vendido' $scope")->fetchColumn(),
+            'prosp_nuevos' => $db->query("SELECT COUNT(*) FROM prospectos WHERE estado='Nuevo' $scope")->fetchColumn(),
+            'prosp_interesados' => $db->query("SELECT COUNT(*) FROM prospectos WHERE estado IN ('Interesado','Visita agendada','Negociando') $scope")->fetchColumn(),
+            'citas_hoy' => $db->query("SELECT COUNT(*) FROM citas WHERE fecha='$today' $scope")->fetchColumn(),
+            'citas_pendientes' => $db->query("SELECT COUNT(*) FROM citas WHERE estado='Pendiente' AND fecha>='$today' $scope")->fetchColumn(),
+            'sin_seguimiento' => $db->query("SELECT COUNT(*) FROM prospectos WHERE estado NOT IN ('Descartado','No interesado','Lista negra','Cerrado') AND ultimo_contacto <= DATE_SUB(CURDATE(), INTERVAL 5 DAY) $scope")->fetchColumn(),
+        ];
+        $citas_proximas = $db->query("SELECT c.*, p.nombre as prospecto_nombre, pr.titulo as propiedad_titulo FROM citas c LEFT JOIN prospectos p ON p.id=c.prospecto_id LEFT JOIN propiedades pr ON pr.id=c.propiedad_id WHERE c.estado IN ('Pendiente','Confirmado') AND c.fecha>='$today' $scope ORDER BY c.fecha, c.hora LIMIT 5")->fetchAll();
+        $etapas = [];
+        foreach (['Nuevo','Contactado','Interesado','Visita agendada','Visitó','Negociando','Cerrado'] as $e) {
+            $etapas[$e] = $db->query("SELECT COUNT(*) FROM prospectos WHERE estado=" . $db->quote($e) . " $scope")->fetchColumn();
+        }
+        json(compact('stats', 'citas_proximas', 'etapas'));
+    }
+
+    // ── PLANTILLAS WHATSAPP ──
+    if ($path === '/api/plantillas' && $method === 'GET') {
+        $user = requireAuth();
+        $db = getDB();
+        $plantillas = $db->query("SELECT * FROM plantillas_whatsapp WHERE activa=1 ORDER BY id")->fetchAll();
+        json($plantillas);
+    }
+
+    // ── USUARIOS (admin) ──
+    if ($path === '/api/usuarios' && $method === 'GET') {
+        requireAdmin();
+        $db = getDB();
+        $users = $db->query("SELECT id,empresa_id,nombre,correo,rol,corredor_id,activo,created_at FROM usuarios ORDER BY id")->fetchAll();
+        json($users);
+    }
+
+    if ($path === '/api/usuarios' && $method === 'POST') {
+        requireAdmin();
+        $data = body();
+        $db = getDB();
+        if (empty($data['correo']) || empty($data['password'])) jsonError('Correo y contraseña requeridos');
+        $hash = password_hash($data['password'], PASSWORD_DEFAULT);
+        $db->prepare("INSERT INTO usuarios (empresa_id,nombre,correo,password_hash,rol,corredor_id) VALUES (?,?,?,?,?,?)")
+           ->execute([1, $data['nombre'], $data['correo'], $hash, $data['rol']??'corredor', $data['corredor_id']??null]);
+        json(['ok' => true, 'id' => $db->lastInsertId()]);
+    }
+
+    jsonError('Ruta no encontrada', 404);
+}
+
+// ─── FUNCIÓN AUXILIAR MATCHES ──────────────────────────────────────────────────
+function computeMatchesForProp(PDO $db, array $prop): void {
+    $prospectos = $db->query("SELECT * FROM prospectos WHERE estado NOT IN ('Lista negra','Descartado','Cerrado')")->fetchAll();
+    $reqs = $db->query("SELECT * FROM requerimientos WHERE estado='Activo'")->fetchAll();
+    foreach ($prospectos as $prosp) {
+        $prospReqs = array_filter($reqs, fn($r) => $r['prospecto_id'] == $prosp['id']);
+        foreach ($prospReqs as $req) {
+            $m = calcMatch($prop, $req, $prosp);
+            if ($m && $m['score'] >= 40) {
+                $db->prepare("INSERT INTO matches_guardados (propiedad_id,prospecto_id,requerimiento_id,score) VALUES (?,?,?,?)
+                   ON DUPLICATE KEY UPDATE score=VALUES(score), visto=0")
+                   ->execute([$prop['id'], $prosp['id'], $req['id'], $m['score']]);
+            }
+        }
+    }
+}
+
+// ─── FRONTEND HTML ─────────────────────────────────────────────────────────────
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CorredorPro · CRM Inmobiliario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#1a56a4;--blue-lt:#e8f1fc;--blue-dk:#0f3872;
+  --teal:#0a7060;--teal-lt:#e0f4f0;
+  --amber:#c07a10;--amber-lt:#fdf0dc;
+  --red:#b02828;--red-lt:#fceaea;
+  --green:#3a6b0f;--green-lt:#eaf3de;
+  --gray:#64625e;--gray-lt:#f2f0ea;
+  --sidebar:224px;
+  --bg:#f5f4f0;--bg2:#fff;--bg3:#fafaf8;
+  --border:#e4e2dc;--border2:#ede9e2;
+  --text:#1a1916;--text2:#5a5854;--text3:#9e9b96;
+  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.06);
+}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+button{cursor:pointer;font-family:inherit;font-size:14px}
+input,select,textarea{font-family:inherit;font-size:14px}
+a{text-decoration:none;color:inherit}
+/* ── Layout ── */
+#app{display:flex;min-height:100vh}
+#sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar);background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:200;transition:transform .2s}
+#main{margin-left:var(--sidebar);flex:1;padding:28px 32px;max-width:1100px}
+/* ── Sidebar ── */
+.sidebar-brand{padding:22px 18px 16px;border-bottom:1px solid var(--border)}
+.sidebar-logo{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;color:var(--blue);letter-spacing:-0.5px}
+.sidebar-sub{font-size:10px;color:var(--text3);margin-top:1px;text-transform:uppercase;letter-spacing:.5px}
+.sidebar-nav{flex:1;overflow-y:auto;padding:8px 0}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 18px;border:none;background:none;color:var(--text2);font-size:13px;font-weight:400;border-left:3px solid transparent;text-align:left;cursor:pointer;transition:all .15s}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--blue-lt);color:var(--blue);font-weight:600;border-left-color:var(--blue)}
+.nav-icon{font-size:17px;width:20px;text-align:center;flex-shrink:0}
+.sidebar-footer{padding:14px 18px;border-top:1px solid var(--border)}
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;white-space:nowrap;border:1px solid transparent}
+/* ── Cards ── */
+.card{background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);padding:16px}
+.stat-card{background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);padding:14px 16px}
+.stat-val{font-size:28px;font-weight:700;line-height:1.2}
+.stat-label{font-size:11px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:none;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:var(--blue-dk)}
+.btn-secondary{background:var(--bg3);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:var(--bg)}
+.btn-success{background:var(--teal);color:#fff}.btn-success:hover{filter:brightness(.9)}
+.btn-danger{background:var(--red);color:#fff}.btn-danger:hover{filter:brightness(.9)}
+.btn-ghost{background:none;color:var(--blue);border:1px solid rgba(26,86,164,.2)}.btn-ghost:hover{background:var(--blue-lt)}
+.btn-sm{padding:5px 12px;font-size:12px;border-radius:7px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-full{width:100%;justify-content:center}
+/* ── Forms ── */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px}
+.field label .req{color:var(--red)}
+.input,.select,.textarea{width:100%;padding:8px 11px;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);color:var(--text);transition:border .15s;outline:none}
+.input:focus,.select:focus,.textarea:focus{border-color:var(--blue);background:#fff}
+.textarea{resize:vertical;min-height:80px}
+.input-group{display:flex;gap:6px}.input-group .select{width:auto;flex-shrink:0}
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;animation:fadeIn .15s}
+.modal{background:var(--bg2);border-radius:16px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2);z-index:1}
+.modal-title{font-size:16px;font-weight:600}
+.modal-close{background:none;border:none;font-size:22px;color:var(--text3);line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
+.modal-close:hover{background:var(--bg3)}
+.modal-body{padding:22px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;padding:16px 22px;border-top:1px solid var(--border)}
+/* ── Grid ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.grid-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+/* ── Tables / Lists ── */
+.list-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:13px 16px;cursor:pointer;transition:all .15s;display:flex;gap:12px;align-items:flex-start}
+.list-item:hover{border-color:var(--blue);box-shadow:var(--shadow)}
+/* ── Avatar ── */
+.avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0}
+/* ── Page header ── */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px}
+.page-title{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.5px}
+/* ── Filters ── */
+.filters{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px}
+/* ── Alert ── */
+.alert{border-radius:10px;padding:12px 16px;display:flex;gap:12px;align-items:flex-start;margin-bottom:16px;font-size:13px}
+.alert-warn{background:var(--amber-lt);border:1px solid rgba(192,122,16,.3)}
+.alert-info{background:var(--blue-lt);border:1px solid rgba(26,86,164,.2)}
+.alert-success{background:var(--teal-lt);border:1px solid rgba(10,112,96,.2)}
+/* ── Timeline ── */
+.timeline-item{display:flex;gap:12px;margin-bottom:12px}
+.timeline-dot{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:2px}
+/* ── Progress bar ── */
+.progress{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.progress-bar{height:100%;border-radius:4px;background:var(--blue);transition:width .3s}
+/* ── Match score ── */
+.score-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0}
+/* ── Login ── */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+.login-box{background:var(--bg2);border-radius:20px;padding:44px 40px;width:100%;max-width:420px;border:1px solid var(--border);box-shadow:0 8px 40px rgba(0,0,0,.08)}
+.login-logo{font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--blue);margin-bottom:4px}
+/* ── Animations ── */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.animate-in{animation:slideUp .2s ease}
+/* ── Loading ── */
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ── Tabs ── */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.tab{padding:8px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text3);font-weight:500;font-size:13px;cursor:pointer;margin-bottom:-1px}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+/* ── Confidence ── */
+.conf-alta{background:var(--green-lt);color:var(--green)}
+.conf-media{background:var(--amber-lt);color:var(--amber)}
+.conf-baja{background:var(--red-lt);color:var(--red)}
+/* ── Topbar móvil ── */
+#topbar{
+  display:none;position:fixed;top:0;left:0;right:0;height:54px;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  z-index:300;align-items:center;padding:0 16px;gap:12px;
+}
+#topbar-logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--blue);flex:1;letter-spacing:-.5px}
+#burger{
+  background:none;border:none;width:40px;height:40px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:5px;cursor:pointer;border-radius:10px;flex-shrink:0;transition:background .15s;
+}
+#burger:active{background:var(--bg3)}
+#burger span{display:block;width:22px;height:2px;background:var(--text);border-radius:2px;transition:all .25s}
+#burger.active span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+#burger.active span:nth-child(2){opacity:0;transform:scaleX(0)}
+#burger.active span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+/* ── Overlay oscuro al abrir sidebar ── */
+#sidebar-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.45);z-index:190;
+}
+#sidebar-overlay.visible{display:block;animation:fadeIn .18s}
+/* ── Bottom nav (solo móvil) ── */
+#bottom-nav{
+  display:none;position:fixed;bottom:0;left:0;right:0;
+  height:60px;background:var(--bg2);border-top:1px solid var(--border);
+  z-index:300;align-items:stretch;
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;background:none;border:none;
+  color:var(--text3);font-size:10px;font-weight:500;cursor:pointer;
+  padding:6px 2px 4px;transition:color .15s;-webkit-tap-highlight-color:transparent;
+}
+.bnav-item.active{color:var(--blue)}
+.bnav-icon{font-size:20px;line-height:1}
+.bnav-item.active .bnav-icon{transform:scale(1.12)}
+/* ── Responsive completo ── */
+@media(max-width:768px){
+  /* Topbar y bottom nav visibles */
+  #topbar{display:flex}
+  #bottom-nav{display:flex}
+  /* Botón × del sidebar visible en móvil */
+  #sidebar-close-btn{display:block!important}
+  /* Sidebar: oculto por defecto, desliza desde la izquierda */
+  #sidebar{transform:translateX(-100%);box-shadow:none;transition:transform .24s cubic-bezier(.4,0,.2,1)}
+  #sidebar.open{transform:translateX(0);box-shadow:6px 0 32px rgba(0,0,0,.18)}
+  /* Main: espacio para topbar arriba y bottom nav abajo */
+  #main{margin-left:0;padding:66px 14px 76px}
+  /* Grids colapsan a 1 columna */
+  .grid2{grid-template-columns:1fr}
+  .grid3{grid-template-columns:1fr 1fr}
+  .grid-auto{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+  /* Tipografía */
+  .page-title{font-size:19px}
+  .page-header{margin-bottom:14px}
+  /* Modales: sheet desde abajo en móvil */
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal{
+    border-radius:20px 20px 0 0;
+    max-height:92vh;width:100%;max-width:100%;
+    animation:slideUp .22s cubic-bezier(.4,0,.2,1);
+  }
+  .modal-header{padding:14px 18px;position:sticky;top:0;background:var(--bg2);z-index:1}
+  .modal-body{padding:16px 18px}
+  .modal-footer{padding:12px 18px 20px;flex-wrap:wrap;gap:8px}
+  .modal-footer .btn{flex:1;justify-content:center;font-size:14px}
+  /* Cards y listas compactas */
+  .list-item{padding:11px 13px;gap:10px}
+  .stat-card{padding:12px 14px}
+  .stat-val{font-size:22px}
+  .stat-label{font-size:10px}
+  /* Touch targets más grandes */
+  .btn-sm{padding:8px 14px;font-size:13px}
+  .btn{padding:10px 14px}
+  .input,.select,.textarea{padding:9px 11px}
+  /* Filters compactos */
+  .filters{padding:10px;gap:8px}
+  /* Sidebar footer oculto en móvil (la info está en topbar) */
+  .sidebar-footer{display:none}
+}
+@media(max-width:400px){
+  .grid3{grid-template-columns:1fr}
+  .grid-auto{grid-template-columns:1fr 1fr}
+  #main{padding:62px 12px 74px}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+'use strict';
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const state = {
+  user: null,
+  page: 'dashboard',
+  data: { props:[], prospectos:[], citas:[], seguimientos:[], reqs:{}, dashboard:{}, plantillas:[] },
+  loading: {},
+  modals: {},
+  sidebarOpen: false,
+};
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmtMoney = (v, m='S/') => `${m} ${Number(v).toLocaleString('es-PE')}`;
+const today = () => new Date().toISOString().slice(0,10);
+const initials = n => n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+const COLORS = ['#1a56a4','#0a7060','#c07a10','#b02828','#3a6b0f','#534ab7','#993556'];
+const colorFor = s => { let h=0; for(let c of s) h=(h*31+c.charCodeAt(0))%COLORS.length; return COLORS[h]; };
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+const APP_BASE = window.location.pathname.replace(/\/$/, '');
+const API_BASE = APP_BASE + '/api';
+
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin'
+  };
+
+  if (body) opts.body = JSON.stringify(body);
+
+  const r = await fetch(API_BASE + path, opts);
+
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    data = {};
+  }
+
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+const GET  = p => api('GET',p);
+const POST = (p,b) => api('POST',p,b);
+const PUT  = (p,b) => api('PUT',p,b);
+const DEL  = p => api('DELETE',p);
+
+// ─── ANTHROPIC AI ─────────────────────────────────────────────────────────────
+async function extractFromText(text) {
+  return await POST('/extract/anuncio', { text });
+}
+
+// ─── RENDER ENGINE ───────────────────────────────────────────────────────────
+function render() {
+  const app = $('app');
+  if (!state.user) { app.innerHTML = renderLogin(); bindLogin(); return; }
+  app.innerHTML = `
+    <div id="topbar">
+      <button id="burger" class="${state.sidebarOpen?'active':''}" aria-label="Menú" onclick="toggleSidebar()">
+        <span></span><span></span><span></span>
+      </button>
+      <div id="topbar-logo">CorredorPro</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${avatar(state.user.nombre, 30)}
+      </div>
+    </div>
+    <div id="sidebar-overlay" class="${state.sidebarOpen?'visible':''}" onclick="toggleSidebar()"></div>
+    <nav id="sidebar" class="${state.sidebarOpen?'open':''}">
+      ${renderSidebar()}
+    </nav>
+    <main id="main">
+      <div id="page-content" class="animate-in">${renderPage()}</div>
+    </main>
+    ${renderBottomNav()}
+    ${state.modalHTML || ''}
+  `;
+  bindPage();
+}
+
+function renderLogin() {
+  return `
+  <div id="login-screen">
+    <div class="login-box">
+      <div style="text-align:center;margin-bottom:32px">
+        <div class="login-logo">CorredorPro</div>
+        <div style="font-size:13px;color:var(--text3);margin-top:4px">CRM Inmobiliario · Pucallpa</div>
+      </div>
+      <div class="field">
+        <label>Correo o usuario<span class="req"> *</span></label>
+        <input id="l-correo" class="input" type="email" placeholder="correo@ejemplo.com" autocomplete="email"/>
+      </div>
+      <div class="field">
+        <label>Contraseña<span class="req"> *</span></label>
+        <input id="l-pass" class="input" type="password" placeholder="••••••••" autocomplete="current-password"/>
+      </div>
+      <div id="l-err" style="display:none" class="alert alert-warn" style="margin-bottom:12px"></div>
+      <button id="l-btn" class="btn btn-primary btn-full" style="margin-top:4px">Iniciar sesión</button>
+      <div style="margin-top:18px;font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:14px;line-height:1.8">
+        <strong>Demo:</strong><br>
+        admin@corredor.pro / admin123
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderBottomNav() {
+  const items = [
+    {id:'dashboard',  icon:'⊞', label:'Inicio'},
+    {id:'propiedades',icon:'⌂', label:'Predios'},
+    {id:'prospectos', icon:'◈', label:'Clientes'},
+    {id:'citas',      icon:'◷', label:'Citas'},
+    {id:'matching',   icon:'⌖', label:'Match'},
+  ];
+  return `<nav id="bottom-nav">
+    ${items.map(it=>`
+      <button class="bnav-item ${state.page===it.id?'active':''}" data-bnav="${it.id}">
+        <span class="bnav-icon">${it.icon}</span>
+        <span>${it.label}</span>
+      </button>`).join('')}
+  </nav>`;
+}
+
+
+function renderSidebar() {
+  const items = [
+    {id:'dashboard', icon:'⊞', label:'Dashboard'},
+    {id:'propiedades', icon:'⌂', label:'Propiedades'},
+    {id:'prospectos', icon:'◈', label:'Prospectos'},
+    {id:'citas', icon:'◷', label:'Citas y Agenda'},
+    {id:'seguimientos', icon:'↺', label:'Seguimientos'},
+    {id:'matching', icon:'⌖', label:'Matching IA'},
+    ...(state.user.rol==='admin' ? [{id:'admin', icon:'◉', label:'Administración'}] : []),
+  ];
+  return `
+  <div class="sidebar-brand" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <div>
+      <div class="sidebar-logo">CorredorPro</div>
+      <div class="sidebar-sub">CRM Inmobiliario</div>
+    </div>
+    <button id="sidebar-close-btn" onclick="toggleSidebar()" aria-label="Cerrar menú"
+      style="background:none;border:none;font-size:24px;color:var(--text3);cursor:pointer;padding:2px 6px;border-radius:8px;line-height:1;flex-shrink:0">×</button>
+  </div>
+  <div class="sidebar-nav">
+    ${items.map(it=>`
+      <button class="nav-item ${state.page===it.id?'active':''}" data-page="${it.id}">
+        <span class="nav-icon">${it.icon}</span>${it.label}
+      </button>`).join('')}
+  </div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      ${avatar(state.user.nombre, 34)}
+      <div>
+        <div style="font-size:12px;font-weight:600;line-height:1.3">${state.user.nombre}</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:capitalize">${state.user.rol}</div>
+      </div>
+    </div>
+    <button id="logout-btn" class="btn btn-ghost btn-sm btn-full">Cerrar sesión</button>
+  </div>`;
+}
+
+// ─── COMPONENT HELPERS ────────────────────────────────────────────────────────
+function avatar(name, size=36) {
+  const bg = colorFor(name);
+  return `<div class="avatar" style="width:${size}px;height:${size}px;background:${bg}22;color:${bg};font-size:${size*.35}px;border:1.5px solid ${bg}44">${initials(name)}</div>`;
+}
+
+const BADGE_COLORS = {
+  Disponible:'#3a6b0f', Reservado:'#c07a10', Alquilado:'#1a56a4', Vendido:'#534ab7', Inactivo:'#64625e',
+  Activo:'#3a6b0f', Nuevo:'#1a56a4', Interesado:'#0a7060', 'Visita agendada':'#c07a10',
+  Contactado:'#1a56a4', Negociando:'#534ab7', Cerrado:'#3a6b0f', Descartado:'#64625e',
+  'No interesado':'#999', 'Lista negra':'#b02828',
+  Alquiler:'#1a56a4', Venta:'#534ab7',
+  Pendiente:'#c07a10', Confirmado:'#0a7060', Realizado:'#3a6b0f', Cancelado:'#b02828',
+  Visita:'#1a56a4', Llamada:'#534ab7', Reunión:'#0a7060', Recordatorio:'#c07a10', Seguimiento:'#3a6b0f',
+  WhatsApp:'#3a6b0f', Email:'#1a56a4', Nota:'#64625e', Propuesta:'#534ab7',
+  Departamento:'#1a56a4', Casa:'#0a7060', Terreno:'#c07a10', Cuarto:'#534ab7', Minidepartamento:'#3a6b0f',
+};
+function badge(label, extra='') {
+  const c = BADGE_COLORS[label] || '#64625e';
+  return `<span class="badge" style="background:${c}22;color:${c};border-color:${c}44" ${extra}>${label}</span>`;
+}
+
+function scoreCircle(score) {
+  const c = score>=70?'var(--green)':score>=50?'var(--amber)':'var(--red)';
+  const bg = score>=70?'var(--green-lt)':score>=50?'var(--amber-lt)':'var(--red-lt)';
+  return `<div class="score-circle" style="background:${bg};color:${c}">${score}%</div>`;
+}
+
+// ─── PAGES ───────────────────────────────────────────────────────────────────
+function renderPage() {
+  switch(state.page) {
+    case 'dashboard': return renderDashboard();
+    case 'propiedades': return renderPropiedades();
+    case 'prospectos': return renderProspectos();
+    case 'citas': return renderCitas();
+    case 'seguimientos': return renderSeguimientos();
+    case 'matching': return renderMatching();
+    case 'admin': return state.user.rol==='admin' ? renderAdmin() : '<div style="padding:40px;text-align:center;color:var(--text3)">Sin acceso</div>';
+    default: return renderDashboard();
+  }
+}
+
+// ── DASHBOARD ──────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const d = state.data.dashboard;
+  const s = d.stats || {};
+  const citas = d.citas_proximas || [];
+  const etapas = d.etapas || {};
+  const maxEtapa = Math.max(1, ...Object.values(etapas));
+  return `
+  <div class="page-header">
+    <h1 class="page-title">Dashboard</h1>
+    <span style="font-size:12px;color:var(--text3)">${new Date().toLocaleDateString('es-PE',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</span>
+  </div>
+
+  <div class="grid-auto" style="margin-bottom:24px">
+    ${statCard('Disponibles', s.props_disponibles||0, 'var(--green)')}
+    ${statCard('Alquiladas', s.props_alquiladas||0, 'var(--blue)')}
+    ${statCard('Vendidas', s.props_vendidas||0, 'var(--teal)')}
+    ${statCard('Prosp. nuevos', s.prosp_nuevos||0, 'var(--amber)')}
+    ${statCard('En negociación', s.prosp_interesados||0, '#534ab7')}
+    ${statCard('Citas hoy', s.citas_hoy||0, 'var(--red)')}
+    ${statCard('Citas pendientes', s.citas_pendientes||0, 'var(--amber)')}
+    ${statCard('Sin seguimiento', s.sin_seguimiento||0, 'var(--red)', '+5 días')}
+  </div>
+
+  ${(s.sin_seguimiento||0)>0 ? `
+  <div class="alert alert-warn">
+    <span style="font-size:18px">⚠</span>
+    <div><strong>${s.sin_seguimiento} prospecto(s) sin seguimiento</strong><br>
+    <span style="font-size:12px">Llevan más de 5 días sin contacto. Revisa la sección de prospectos.</span></div>
+  </div>` : ''}
+
+  <div class="grid2" style="gap:16px">
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px">Embudo de prospectos</div>
+      ${Object.entries(etapas).map(([e,c])=>`
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="font-size:12px;color:var(--text2);width:110px;flex-shrink:0">${e}</div>
+          <div class="progress" style="flex:1">
+            <div class="progress-bar" style="width:${Math.round(c/maxEtapa*100)}%;background:var(--blue)"></div>
+          </div>
+          <div style="font-size:12px;font-weight:600;width:20px;text-align:right">${c}</div>
+        </div>`).join('')}
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px">Próximas citas</div>
+      ${citas.length===0?'<div style="font-size:13px;color:var(--text3)">No hay citas próximas</div>':
+        citas.map(c=>`
+          <div style="display:flex;gap:10px;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--border);align-items:flex-start">
+            <div style="width:40px;text-align:center;flex-shrink:0">
+              <div style="font-size:10px;color:var(--text3)">${(c.fecha||'').slice(5)}</div>
+              <div style="font-size:13px;font-weight:600">${c.hora||''}</div>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:500">${c.titulo}</div>
+              <div style="font-size:11px;color:var(--text2)">${c.prospecto_nombre||''} ${badge(c.estado)}</div>
+            </div>
+          </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function statCard(label, value, color, sub='') {
+  return `<div class="stat-card">
+    <div class="stat-label">${label}</div>
+    <div class="stat-val" style="color:${color}">${value}</div>
+    ${sub?`<div style="font-size:10px;color:var(--text3)">${sub}</div>`:''}
+  </div>`;
+}
+
+// ── PROPIEDADES ────────────────────────────────────────────────────────────────
+function renderPropiedades() {
+  const props = state.data.props || [];
+  return `
+  <div class="page-header">
+    <h1 class="page-title">Propiedades</h1>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary btn-sm" id="btn-nueva-manual">＋ Manual</button>
+      <button class="btn btn-primary btn-sm" id="btn-nueva-ai">⚡ Pegar anuncio (IA)</button>
+    </div>
+  </div>
+  <div class="filters grid-auto" id="prop-filters">
+    <select class="select" id="f-tipo"><option value="">Todos los tipos</option>
+      ${['Departamento','Cuarto','Minidepartamento','Casa','Terreno','Oficina','Local','Otros'].map(t=>`<option>${t}</option>`).join('')}
+    </select>
+    <select class="select" id="f-op"><option value="">Alquiler y Venta</option><option>Alquiler</option><option>Venta</option></select>
+    <select class="select" id="f-estado"><option value="">Todos los estados</option>
+      ${['Disponible','Reservado','Alquilado','Vendido','Inactivo'].map(t=>`<option>${t}</option>`).join('')}
+    </select>
+    <input class="input" id="f-zona" placeholder="Zona / distrito..."/>
+  </div>
+  <div id="props-list">
+    ${props.length===0?'<div style="text-align:center;padding:40px;color:var(--text3)">No hay propiedades registradas</div>':
+      props.map(renderPropCard).join('')}
+  </div>`;
+}
+
+function renderPropCard(p) {
+  const icon = p.tipo==='Casa'?'⌂':p.tipo==='Terreno'?'⬚':p.tipo==='Departamento'?'▦':'▢';
+  return `<div class="list-item" style="margin-bottom:10px" data-prop-id="${p.id}">
+    <div style="width:48px;height:48px;border-radius:10px;background:var(--blue-lt);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${icon}</div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:3px">
+        <span style="font-size:10px;color:var(--text3)">${p.codigo}</span>
+        ${badge(p.operacion)} ${badge(p.estado)}
+      </div>
+      <div style="font-weight:600;font-size:14px;margin-bottom:2px">${p.titulo}</div>
+      <div style="font-size:12px;color:var(--text2)">${p.zona||''} · ${p.distrito||''} · <strong>${fmtMoney(p.precio,p.moneda)}</strong></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">
+        ${p.tipo!=='Terreno'?`${p.habitaciones} dorm · ${p.banos} baño${p.banos!=1?'s':''} · `:''}
+        Piso ${p.piso||1} · ${p.area}m²
+        ${p.cochera?' · 🅿 '+p.tipo_cochera:''}
+        ${p.aire?' · ❄':''}
+        ${p.mascotas==='Sí'?' · 🐾':''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── PROSPECTOS ─────────────────────────────────────────────────────────────────
+function renderProspectos() {
+  const prosp = state.data.prospectos || [];
+  return `
+  <div class="page-header">
+    <h1 class="page-title">Prospectos</h1>
+    <button class="btn btn-primary btn-sm" id="btn-nuevo-prosp">＋ Nuevo prospecto</button>
+  </div>
+  <div class="filters grid2">
+    <select class="select" id="pf-estado"><option value="">Todos los estados</option>
+      ${['Nuevo','Contactado','Interesado','Visita agendada','Visitó','Negociando','Cerrado','Descartado','No interesado','Lista negra'].map(t=>`<option>${t}</option>`).join('')}
+    </select>
+    <select class="select" id="pf-fuente"><option value="">Todas las fuentes</option>
+      ${['Facebook','WhatsApp','TikTok','Referido','Llamada','Cartel','Otro'].map(t=>`<option>${t}</option>`).join('')}
+    </select>
+  </div>
+  <div id="prosp-list">
+    ${prosp.length===0?'<div style="text-align:center;padding:40px;color:var(--text3)">No hay prospectos registrados</div>':
+      prosp.map(renderProspCard).join('')}
+  </div>`;
+}
+
+function renderProspCard(p) {
+  const sinSeg = p.ultimo_contacto && (new Date(today())-new Date(p.ultimo_contacto)) > 5*86400000 && !['Descartado','No interesado','Lista negra','Cerrado'].includes(p.estado);
+  return `<div class="list-item" style="margin-bottom:8px;${sinSeg?'border-color:var(--amber)':''}" data-prosp-id="${p.id}">
+    ${avatar(p.nombre, 40)}
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:3px">
+        <span style="font-size:10px;color:var(--text3)">${p.codigo}</span>
+        ${badge(p.estado)}
+        <span style="font-size:11px;color:var(--text3)">${p.fuente}</span>
+      </div>
+      <div style="font-weight:600;font-size:14px">${p.nombre}</div>
+      <div style="font-size:12px;color:var(--text2)">${p.telefono||''}${p.extranjero?' · 🌍 Extranjero':''}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      ${sinSeg?'<div style="font-size:10px;color:var(--amber);font-weight:600">⚠ Sin seguimiento</div>':''}
+      ${p.proximo_seguimiento?`<div style="font-size:11px;color:var(--text3)">Seg: ${p.proximo_seguimiento}</div>`:''}
+      <button class="btn-wa" data-wa="${p.whatsapp}" data-nombre="${p.nombre}" style="background:none;border:none;font-size:18px;cursor:pointer;margin-top:4px" title="WhatsApp">💬</button>
+    </div>
+  </div>`;
+}
+
+// ── CITAS ─────────────────────────────────────────────────────────────────────
+function renderCitas() {
+  const citas = state.data.citas || [];
+  const hoy = today();
+  const grupos = {Hoy:[], Próximas:[], Pasadas:[]};
+  citas.forEach(c => {
+    if(c.fecha===hoy) grupos.Hoy.push(c);
+    else if(c.fecha>hoy) grupos.Próximas.push(c);
+    else grupos.Pasadas.push(c);
+  });
+  const colorEstado = {Pendiente:'var(--amber)',Confirmado:'var(--teal)',Realizado:'var(--green)',Cancelado:'var(--red)',Reprogramado:'#534ab7'};
+
+  return `
+  <div class="page-header">
+    <h1 class="page-title">Citas y Agenda</h1>
+    <button class="btn btn-primary btn-sm" id="btn-nueva-cita">＋ Nueva cita</button>
+  </div>
+  ${['Hoy','Próximas','Pasadas'].filter(g=>grupos[g].length>0).map(g=>`
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">${g}</div>
+      ${grupos[g].sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.hora.localeCompare(b.hora)).map(c=>`
+        <div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${colorEstado[c.estado]||'#ccc'};border-radius:var(--radius);padding:12px 16px;margin-bottom:8px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="text-align:center;width:46px;flex-shrink:0">
+              <div style="font-size:10px;color:var(--text3)">${(c.fecha||'').slice(5)}</div>
+              <div style="font-size:14px;font-weight:700">${c.hora||''}</div>
+              <div style="font-size:10px;color:var(--text3)">${c.duracion}min</div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.titulo}</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:2px">
+                ${c.prospecto_nombre||''}${c.propiedad_titulo?' · '+c.propiedad_codigo:''}
+              </div>
+              ${c.ubicacion?`<div style="font-size:11px;color:var(--text3);margin-top:3px">📍 ${c.ubicacion}</div>`:''}
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${badge(c.tipo)} ${badge(c.estado)}
+                ${c.confirmado_cliente?'<span style="font-size:11px;color:var(--green)">✓ Confirmó</span>':''}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+            ${c.prospecto_wa?`<button class="btn-wa-cita btn btn-success btn-sm" data-cita-id="${c.id}" data-wa="${c.prospecto_wa}" title="Enviar recordatorio WhatsApp">💬 WA</button>`:''}
+            <select class="select" style="font-size:12px;padding:6px 8px;flex:1" data-cita-id="${c.id}" onchange="updateCitaEstado(this.value,${c.id})">
+              ${['Pendiente','Confirmado','Realizado','Cancelado','Reprogramado','No asistió'].map(t=>`<option ${t===c.estado?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </div>
+        </div>`).join('')}
+    </div>`).join('')}
+  ${Object.values(grupos).every(g=>g.length===0)?'<div style="text-align:center;padding:40px;color:var(--text3)">No hay citas registradas</div>':''}`;
+}
+
+// ── SEGUIMIENTOS ──────────────────────────────────────────────────────────────
+function renderSeguimientos() {
+  const segs = state.data.seguimientos || [];
+  const icons = {Llamada:'📞',WhatsApp:'💬',Visita:'🚶',Email:'✉',Nota:'📝',Propuesta:'📋'};
+  return `
+  <div class="page-header">
+    <h1 class="page-title">Seguimientos</h1>
+    <button class="btn btn-primary btn-sm" id="btn-nuevo-seg">＋ Registrar seguimiento</button>
+  </div>
+  <div id="segs-list">
+    ${segs.length===0?'<div style="text-align:center;padding:40px;color:var(--text3)">No hay seguimientos registrados</div>':
+      segs.map(s=>`
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;display:flex;gap:12px">
+        <div style="font-size:24px;width:36px;text-align:center;flex-shrink:0">${icons[s.tipo]||'📝'}</div>
+        <div style="flex:1">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+            ${badge(s.tipo)}
+            ${s.prospecto_nombre?`<span style="font-size:12px">${s.prospecto_nombre}</span>`:''}
+            ${s.propiedad_codigo?`<span style="font-size:12px;color:var(--text3)">· ${s.propiedad_codigo}</span>`:''}
+            <span style="font-size:11px;color:var(--text3);margin-left:auto">${s.fecha}</span>
+          </div>
+          <div style="font-size:13px;color:var(--text2)">${s.nota||''}</div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ── MATCHING ──────────────────────────────────────────────────────────────────
+function renderMatching() {
+  const matches = state.data.matches || [];
+  const min = state.matchMin || 40;
+  return `
+  <div class="page-header">
+    <h1 class="page-title">Matching IA</h1>
+  </div>
+  <div class="alert alert-info">
+    <span>⌖</span>
+    <div>Sugerencias automáticas de compatibilidad entre propiedades y prospectos activos. Solo se muestran propiedades disponibles con prospectos no descartados.</div>
+  </div>
+  <div class="card" style="margin-bottom:16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    <label style="font-size:13px;white-space:nowrap">Compatibilidad mínima: <strong>${min}%</strong></label>
+    <input type="range" min="10" max="90" step="10" value="${min}" id="match-slider" style="flex:1;min-width:120px"/>
+    <div style="display:flex;gap:6px">
+      ${[30,50,70].map(v=>`<button class="btn btn-sm ${min===v?'btn-primary':'btn-secondary'}" data-min="${v}">${v}%+</button>`).join('')}
+    </div>
+  </div>
+  <div id="matches-list">
+    ${matches.length===0?`<div style="text-align:center;padding:40px;color:var(--text3)">No hay coincidencias con ${min}%+ de compatibilidad</div>`:
+      matches.map(m=>`
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:2px">${m.prop_codigo} · ${badge(m.prop_tipo)}</div>
+            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.prop_titulo}</div>
+            <div style="font-size:12px;color:var(--text2)">${fmtMoney(m.prop_precio,m.prop_moneda)} · ${m.prop_zona||''}</div>
+          </div>
+          ${scoreCircle(m.score)}
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;padding-top:10px;border-top:1px solid var(--border)">
+          <div style="flex:1;display:flex;align-items:center;gap:6px">
+            ${avatar(m.prosp_nombre, 24)}
+            <div>
+              <div style="font-size:12px;font-weight:600">${m.prosp_nombre}</div>
+              <div style="font-size:11px;color:var(--text2)">${m.req_tipo} en ${m.req_zonas||''}</div>
+            </div>
+          </div>
+          <div style="font-size:11px;text-align:right">
+            ${(m.reasons||[]).slice(0,1).map(r=>`<div style="color:var(--green)">${r}</div>`).join('')}
+            ${(m.warnings||[]).slice(0,1).map(w=>`<div style="color:var(--amber)">${w}</div>`).join('')}
+          </div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ── ADMIN ─────────────────────────────────────────────────────────────────────
+function renderAdmin() {
+  const users = state.data.usuarios || [];
+  return `
+  <div class="page-header">
+    <h1 class="page-title">Administración</h1>
+    <button class="btn btn-primary btn-sm" id="btn-nuevo-usuario">＋ Nuevo usuario</button>
+  </div>
+  <div class="card" style="margin-bottom:20px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px">Usuarios del sistema</div>
+    ${users.map(u=>`
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        ${avatar(u.nombre)}
+        <div style="flex:1">
+          <div style="font-weight:500">${u.nombre}</div>
+          <div style="font-size:12px;color:var(--text2)">${u.correo}</div>
+        </div>
+        ${badge(u.rol === 'admin' ? 'Administrador' : 'Corredor')}
+        <span style="font-size:11px;color:${u.activo ? 'var(--green)' : 'var(--red)'}">
+          ${u.activo ? 'Activo' : 'Inactivo'}
+        </span>
+      </div>`).join('')}
+  </div>
+  <div class="alert alert-info">
+    <span>🏢</span>
+    <div><strong>Arquitectura multitenancy:</strong> Cada corredor solo ve sus propios datos. El administrador gestiona todos los registros. La plataforma está preparada para escalar a múltiples empresas con aislamiento completo.</div>
+  </div>`;
+}
+
+// ─── MODALS ───────────────────────────────────────────────────────────────────
+function showModal(html) {
+  const existing = document.querySelector('.modal-overlay');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.className = 'modal-overlay';
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  div.addEventListener('click', e => { if(e.target===div) closeModal(); });
+}
+function closeModal() {
+  document.querySelector('.modal-overlay')?.remove();
+}
+
+// ── Modal Propiedad Manual ────────────────────────────────────────────────────
+function showModalPropManual(data={}) {
+  const tipos = ['Departamento','Cuarto','Minidepartamento','Casa','Terreno','Oficina','Local','Otros'];
+  const opOpts = ['Alquiler','Venta'].map(t=>`<option ${data.operacion===t?'selected':''}>${t}</option>`).join('');
+  const tipoOpts = tipos.map(t=>`<option ${data.tipo===t?'selected':''}>${t}</option>`).join('');
+  const estadoOpts = ['Disponible','Reservado','Inactivo'].map(t=>`<option ${(data.estado||'Disponible')===t?'selected':''}>${t}</option>`).join('');
+
+  showModal(`<div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <div class="modal-title">Registrar propiedad</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Título<span class="req"> *</span></label>
+          <input class="input" id="m-titulo" value="${data.titulo||''}" placeholder="Ej: Dpto 2do piso Callería"/></div>
+        <div class="field"><label>Tipo de inmueble</label>
+          <select class="select" id="m-tipo">${tipoOpts}</select></div>
+        <div class="field"><label>Operación</label>
+          <select class="select" id="m-op">${opOpts}</select></div>
+        <div class="field"><label>Precio<span class="req"> *</span></label>
+          <div class="input-group">
+            <select class="select" id="m-moneda" style="width:70px">
+              <option ${data.moneda==='S/'?'selected':''}>S/</option><option ${data.moneda==='$'?'selected':''}>$</option>
+            </select>
+            <input class="input" type="number" id="m-precio" value="${data.precio||''}" placeholder="0"/>
+          </div></div>
+        <div class="field"><label>Distrito</label>
+          <input class="input" id="m-distrito" value="${data.distrito||''}" placeholder="Callería, Manantay..."/></div>
+        <div class="field"><label>Zona / Urbanización</label>
+          <input class="input" id="m-zona" value="${data.zona||''}" placeholder="Av. Ucayali, Urb. Grau..."/></div>
+        <div class="field"><label>Referencias</label>
+          <input class="input" id="m-refs" value="${data.referencias||''}" placeholder="Cerca al mercado..."/></div>
+        <div class="field"><label>Piso</label>
+          <input class="input" type="number" id="m-piso" value="${data.piso||1}"/></div>
+        <div class="field"><label>Área m²</label>
+          <input class="input" type="number" id="m-area" value="${data.area||0}"/></div>
+        <div class="field"><label>Habitaciones</label>
+          <input class="input" type="number" id="m-hab" value="${data.habitaciones||0}"/></div>
+        <div class="field"><label>Baños</label>
+          <input class="input" type="number" id="m-banos" value="${data.banos||1}"/></div>
+        <div class="field"><label>Cochera</label>
+          <select class="select" id="m-cochera"><option ${!data.cochera?'selected':''}>No</option><option ${data.cochera?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Tipo cochera</label>
+          <select class="select" id="m-tipo-coch">
+            <option value="">No aplica</option>
+            ${['Moto lineal','Motocar','Auto','Camioneta','Varios'].map(t=>`<option ${data.tipo_cochera===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Aire acondicionado</label>
+          <select class="select" id="m-aire"><option ${!data.aire?'selected':''}>No</option><option ${data.aire?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Amoblado</label>
+          <select class="select" id="m-amob">
+            ${['No','Sí','Parcial'].map(t=>`<option ${(data.amoblado||'No')===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Mascotas</label>
+          <select class="select" id="m-masc">
+            ${['No especificado','Sí','No'].map(t=>`<option ${(data.mascotas||'No especificado')===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Acepta extranjeros</label>
+          <select class="select" id="m-ext"><option ${!data.extranjeros?'selected':''}>No</option><option ${data.extranjeros?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Agua</label>
+          <select class="select" id="m-agua"><option ${!data.agua_incluida?'selected':''}>Aparte</option><option ${data.agua_incluida?'selected':''}>Incluida</option></select></div>
+        <div class="field"><label>Monto agua (S/)</label>
+          <input class="input" type="number" id="m-agua-m" value="${data.agua_monto||0}"/></div>
+        <div class="field"><label>Luz</label>
+          <select class="select" id="m-luz">
+            <option value="">No especificado</option>
+            ${['Incluida','A consumo'].map(t=>`<option ${data.luz===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Internet incluido</label>
+          <select class="select" id="m-inet"><option ${!data.internet?'selected':''}>No</option><option ${data.internet?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Estado</label>
+          <select class="select" id="m-estado">${estadoOpts}</select></div>
+        <div class="field"><label>Estado publicación</label>
+          <select class="select" id="m-pub">
+            ${['Borrador','Publicado','Archivado'].map(t=>`<option ${(data.estado_publicacion||'Borrador')===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Propietario</label>
+          <input class="input" id="m-prop" value="${data.nombre_propietario||''}" placeholder="Nombre del propietario"/></div>
+        <div class="field"><label>Teléfono propietario</label>
+          <input class="input" id="m-tel" value="${data.tel_propietario||''}" placeholder="9XXXXXXXX"/></div>
+      </div>
+      <div class="field"><label>Descripción comercial</label>
+        <textarea class="textarea" id="m-desc" rows="4" placeholder="Describe el inmueble...">${data.descripcion||''}</textarea></div>
+      <div class="field"><label>Observaciones internas (privado)</label>
+        <textarea class="textarea" id="m-obs" rows="2" placeholder="Notas internas...">${data.observaciones_internas||''}</textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-prop">✓ Guardar propiedad</button>
+    </div>
+  </div>`);
+
+  $('btn-save-prop').onclick = async () => {
+    const titulo = $('m-titulo').value.trim();
+    if (!titulo) { alert('El título es requerido'); return; }
+    const body = {
+      titulo, tipo:$('m-tipo').value, operacion:$('m-op').value,
+      precio:+$('m-precio').value, moneda:$('m-moneda').value,
+      distrito:$('m-distrito').value, zona:$('m-zona').value,
+      referencias:$('m-refs').value, piso:+$('m-piso').value,
+      area:+$('m-area').value, habitaciones:+$('m-hab').value,
+      banos:+$('m-banos').value, cochera:$('m-cochera').value==='Sí'?1:0,
+      tipo_cochera:$('m-tipo-coch').value||null,
+      aire:$('m-aire').value==='Sí'?1:0,
+      amoblado:$('m-amob').value,
+      mascotas:$('m-masc').value,
+      extranjeros:$('m-ext').value==='Sí'?1:0,
+      agua_incluida:$('m-agua').value==='Incluida'?1:0,
+      agua_monto:+$('m-agua-m').value,
+      luz:$('m-luz').value||null,
+      internet:$('m-inet').value==='Sí'?1:0,
+      estado:$('m-estado').value,
+      estado_publicacion:$('m-pub').value,
+      nombre_propietario:$('m-prop').value,
+      tel_propietario:$('m-tel').value,
+      descripcion:$('m-desc').value,
+      observaciones_internas:$('m-obs').value,
+    };
+    try {
+      $('btn-save-prop').disabled = true;
+      $('btn-save-prop').textContent = 'Guardando...';
+      const res = await POST('/propiedades', body);
+      closeModal();
+      await loadData('props');
+      renderPageContent();
+      showToast(`✓ Propiedad ${res.codigo} registrada`);
+    } catch(e) { alert('Error: '+e.message); }
+    finally { $('btn-save-prop').disabled=false; $('btn-save-prop').textContent='✓ Guardar propiedad'; }
+  };
+}
+
+// ── Modal IA Extracción ────────────────────────────────────────────────────────
+function showModalIA() {
+  showModal(`<div class="modal" style="max-width:620px">
+    <div class="modal-header">
+      <div class="modal-title">⚡ Registrar propiedad desde anuncio</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info">
+        <span>⚡</span>
+        <div>Pega el texto del anuncio y la IA extraerá los datos automáticamente para tu revisión antes de guardar.</div>
+      </div>
+      <div class="field"><label>Texto del anuncio<span class="req"> *</span></label>
+        <textarea class="textarea" id="ai-text" rows="10" placeholder="Ej: Departamento de estreno en segundo piso a 950 soles, 2 dormitorios, 1 baño, cochera para moto lineal, agua 40 soles aparte, luz a consumo, zona Callería cerca al mercado...&#10;&#10;También puedes pegar anuncios de Facebook, WhatsApp, etc."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-extract">⚡ Extraer datos con IA</button>
+    </div>
+  </div>`);
+
+  $('btn-extract').onclick = async () => {
+    const text = $('ai-text').value.trim();
+    if (!text) { alert('Escribe o pega el texto del anuncio'); return; }
+    $('btn-extract').disabled = true;
+    $('btn-extract').innerHTML = '<span class="spinner"></span> Analizando...';
+    try {
+      const data = await extractFromText(text);
+      if (!data) { alert('No se pudo extraer información. Intenta con un texto más completo.'); return; }
+      closeModal();
+      showModalConfirmarAI(data);
+    } catch(e) { alert('Error de IA: '+e.message); }
+    finally { const b=$('btn-extract'); if(b){b.disabled=false;b.innerHTML='⚡ Extraer datos con IA';} }
+  };
+}
+
+// ── Modal Confirmar IA ────────────────────────────────────────────────────────
+function showModalConfirmarAI(d) {
+  const conf = d.confianza || {};
+  const confBadge = (k) => {
+    const v = conf[k];
+    if (!v) return '';
+    return `<span class="badge ${v==='alta'?'conf-alta':v==='media'?'conf-media':'conf-baja'}" style="font-size:10px;margin-left:6px">${v}</span>`;
+  };
+
+  showModal(`<div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <div class="modal-title">Confirmar datos detectados por IA</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info">⚡ Verifica y corrige los datos antes de guardar. Los campos sin color = sin dato detectado.</div>
+      <div class="grid2">
+        <div class="field"><label>Título ${confBadge('tipo')}</label>
+          <input class="input" id="ai-titulo" value="${d.titulo||''}"/></div>
+        <div class="field"><label>Tipo de inmueble ${confBadge('tipo')}</label>
+          <select class="select" id="ai-tipo">
+            ${['Departamento','Cuarto','Minidepartamento','Casa','Terreno','Oficina','Local','Otros'].map(t=>`<option ${d.tipo===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Operación ${confBadge('operacion')}</label>
+          <select class="select" id="ai-op"><option ${d.operacion==='Alquiler'?'selected':''}>Alquiler</option><option ${d.operacion==='Venta'?'selected':''}>Venta</option></select></div>
+        <div class="field"><label>Precio ${confBadge('precio')}</label>
+          <div class="input-group">
+            <select class="select" id="ai-moneda" style="width:70px"><option ${d.moneda==='S/'||!d.moneda?'selected':''}>S/</option><option ${d.moneda==='$'?'selected':''}>$</option></select>
+            <input class="input" type="number" id="ai-precio" value="${d.precio||''}"/>
+          </div></div>
+        <div class="field"><label>Piso</label><input class="input" type="number" id="ai-piso" value="${d.piso||''}"/></div>
+        <div class="field"><label>Área (m²)</label><input class="input" type="number" id="ai-area" value="${d.area||''}"/></div>
+        <div class="field"><label>Habitaciones ${confBadge('habitaciones')}</label>
+          <input class="input" type="number" id="ai-hab" value="${d.habitaciones||''}"/></div>
+        <div class="field"><label>Baños</label><input class="input" type="number" id="ai-banos" value="${d.banos||''}"/></div>
+        <div class="field"><label>Zona / referencia ${confBadge('ubicacion')}</label>
+          <input class="input" id="ai-zona" value="${d.zona||''}"/></div>
+        <div class="field"><label>Distrito ${confBadge('ubicacion')}</label>
+          <input class="input" id="ai-distrito" value="${d.distrito||''}"/></div>
+        <div class="field"><label>Referencias</label>
+          <input class="input" id="ai-refs" value="${d.referencias||''}"/></div>
+        <div class="field"><label>Cochera ${confBadge('cochera')}</label>
+          <select class="select" id="ai-cochera"><option ${!d.cochera?'selected':''}>No</option><option ${d.cochera?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Tipo cochera</label>
+          <select class="select" id="ai-tipo-coch">
+            <option value="">No especificado</option>
+            ${['Moto lineal','Motocar','Auto','Camioneta','Varios'].map(t=>`<option ${d.tipo_cochera===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Agua</label>
+          <select class="select" id="ai-agua"><option ${!d.agua_incluida?'selected':''}>Aparte</option><option ${d.agua_incluida?'selected':''}>Incluida</option></select></div>
+        <div class="field"><label>Monto agua (S/)</label>
+          <input class="input" type="number" id="ai-agua-m" value="${d.agua_monto||0}"/></div>
+        <div class="field"><label>Luz</label>
+          <select class="select" id="ai-luz">
+            <option value="">No especificado</option><option ${d.luz==='Incluida'?'selected':''}>Incluida</option><option ${d.luz==='A consumo'?'selected':''}>A consumo</option>
+          </select></div>
+        <div class="field"><label>Mascotas</label>
+          <select class="select" id="ai-masc">
+            ${['No especificado','Sí','No'].map(t=>`<option ${(d.mascotas||'No especificado')===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Acepta extranjeros</label>
+          <select class="select" id="ai-ext"><option ${!d.extranjeros?'selected':''}>No</option><option ${d.extranjeros?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Internet incluido</label>
+          <select class="select" id="ai-inet"><option ${!d.internet?'selected':''}>No</option><option ${d.internet?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Amoblado</label>
+          <select class="select" id="ai-amob">
+            ${['No','Sí','Parcial'].map(t=>`<option ${(d.amoblado||'No')===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Aire acondicionado</label>
+          <select class="select" id="ai-aire"><option ${!d.aire?'selected':''}>No</option><option ${d.aire?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Propietario</label>
+          <input class="input" id="ai-prop" value="${d.nombre_propietario||''}"/></div>
+        <div class="field"><label>Teléfono propietario</label>
+          <input class="input" id="ai-tel" value="${d.tel_propietario||''}"/></div>
+      </div>
+      <div class="field"><label>Descripción generada</label>
+        <textarea class="textarea" id="ai-desc" rows="4">${d.descripcion||''}</textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="showModalIA()">← Volver</button>
+      <button class="btn btn-success" id="btn-confirm-ai">✓ Confirmar y guardar</button>
+    </div>
+  </div>`);
+
+  $('btn-confirm-ai').onclick = async () => {
+    const body = {
+      titulo:$('ai-titulo').value||'Inmueble sin título',
+      tipo:$('ai-tipo').value, operacion:$('ai-op').value,
+      precio:+$('ai-precio').value||0, moneda:$('ai-moneda').value,
+      distrito:$('ai-distrito').value, zona:$('ai-zona').value,
+      referencias:$('ai-refs').value,
+      piso:+$('ai-piso').value||0, area:+$('ai-area').value||0,
+      habitaciones:+$('ai-hab').value||0, banos:+$('ai-banos').value||1,
+      cochera:$('ai-cochera').value==='Sí'?1:0,
+      tipo_cochera:$('ai-tipo-coch').value||null,
+      agua_incluida:$('ai-agua').value==='Incluida'?1:0,
+      agua_monto:+$('ai-agua-m').value||0,
+      luz:$('ai-luz').value||null,
+      mascotas:$('ai-masc').value,
+      extranjeros:$('ai-ext').value==='Sí'?1:0,
+      internet:$('ai-inet').value==='Sí'?1:0,
+      amoblado:$('ai-amob').value,
+      aire:$('ai-aire').value==='Sí'?1:0,
+      nombre_propietario:$('ai-prop').value,
+      tel_propietario:$('ai-tel').value,
+      descripcion:$('ai-desc').value,
+      estado:'Disponible', estado_publicacion:'Borrador',
+    };
+    try {
+      $('btn-confirm-ai').disabled=true;
+      $('btn-confirm-ai').textContent='Guardando...';
+      const res = await POST('/propiedades', body);
+      closeModal();
+      await loadData('props');
+      renderPageContent();
+      showToast(`✓ Propiedad ${res.codigo} registrada con IA`);
+    } catch(e) { alert('Error: '+e.message); }
+    finally { const b=$('btn-confirm-ai'); if(b){b.disabled=false;b.textContent='✓ Confirmar y guardar';} }
+  };
+}
+
+// ── Modal Detalle Propiedad ───────────────────────────────────────────────────
+async function showModalDetalleProp(id) {
+  let prop, matches;
+  try {
+    [prop, matches] = await Promise.all([
+      GET('/propiedades/'+id),
+      GET('/matching/propiedad/'+id)
+    ]);
+  } catch(e) { return; }
+
+  showModal(`<div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <div class="modal-title">${prop.codigo} · ${prop.titulo}</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid2" style="margin-bottom:16px">
+        <div style="background:var(--blue-lt);border-radius:10px;padding:14px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Precio</div>
+          <div style="font-size:26px;font-weight:700;color:var(--blue)">${fmtMoney(prop.precio,prop.moneda)}</div>
+          ${prop.operacion==='Alquiler'?'<div style="font-size:11px;color:var(--text3)">/mes</div>':''}
+        </div>
+        <div style="background:var(--bg3);border-radius:10px;padding:14px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Ubicación</div>
+          <div style="font-size:13px;font-weight:600">${prop.zona||''}</div>
+          <div style="font-size:12px;color:var(--text2)">${prop.distrito||''}</div>
+          ${prop.referencias?`<div style="font-size:11px;color:var(--text3);margin-top:4px">${prop.referencias}</div>`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        ${badge(prop.tipo)} ${badge(prop.operacion)} ${badge(prop.estado)}
+      </div>
+      <p style="font-size:13px;line-height:1.7;color:var(--text2);margin-bottom:16px">${prop.descripcion||''}</p>
+      <div class="grid3" style="font-size:12px;gap:10px;margin-bottom:16px">
+        ${prop.tipo!=='Terreno'?`
+        <div><span style="color:var(--text3)">Dormitorios</span><br><strong>${prop.habitaciones}</strong></div>
+        <div><span style="color:var(--text3)">Baños</span><br><strong>${prop.banos}</strong></div>`:''}
+        <div><span style="color:var(--text3)">Piso</span><br><strong>${prop.piso||1}°</strong></div>
+        <div><span style="color:var(--text3)">Área</span><br><strong>${prop.area}m²</strong></div>
+        <div><span style="color:var(--text3)">Cochera</span><br><strong>${prop.cochera?(prop.tipo_cochera||'Sí'):'No'}</strong></div>
+        <div><span style="color:var(--text3)">Aire acond.</span><br><strong>${prop.aire?'Sí':'No'}</strong></div>
+        <div><span style="color:var(--text3)">Mascotas</span><br><strong>${prop.mascotas||'No especificado'}</strong></div>
+        <div><span style="color:var(--text3)">Amoblado</span><br><strong>${prop.amoblado||'No'}</strong></div>
+        <div><span style="color:var(--text3)">Internet</span><br><strong>${prop.internet?'Incluido':'No'}</strong></div>
+        <div><span style="color:var(--text3)">Agua</span><br><strong>${prop.agua_incluida?'Incluida':`S/ ${prop.agua_monto}`}</strong></div>
+        <div><span style="color:var(--text3)">Luz</span><br><strong>${prop.luz||'No especificado'}</strong></div>
+        <div><span style="color:var(--text3)">Extranjeros</span><br><strong>${prop.extranjeros?'Sí':'No'}</strong></div>
+      </div>
+      ${prop.nombre_propietario?`
+      <div style="border-top:1px solid var(--border);padding-top:12px;font-size:12px;margin-bottom:16px">
+        <span style="color:var(--text3)">Propietario: </span><strong>${prop.nombre_propietario}</strong>
+        ${prop.tel_propietario?` · <a href="https://wa.me/51${prop.tel_propietario}" target="_blank" style="color:var(--teal)">📱 ${prop.tel_propietario}</a>`:''}
+      </div>`:'' }
+      ${matches.length>0?`
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">⌖ Prospectos compatibles</div>
+        ${matches.slice(0,3).map(m=>`
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;background:var(--bg3);border-radius:8px;padding:8px 12px">
+            ${avatar(m.prosp.nombre, 30)}
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500">${m.prosp.nombre}</div>
+              <div style="font-size:11px;color:var(--text3)">${(m.reasons||[]).slice(0,2).join(' · ')}</div>
+            </div>
+            ${scoreCircle(m.score)}
+          </div>`).join('')}
+      </div>`:''}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+      <button class="btn btn-primary" onclick="closeModal();showModalPropManual(${JSON.stringify(prop).replace(/"/g,'&quot;')})">✏ Editar</button>
+    </div>
+  </div>`);
+}
+
+// ── Modal Prospecto ───────────────────────────────────────────────────────────
+function showModalNuevoProsp() {
+  showModal(`<div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <div class="modal-title">Nuevo prospecto</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Nombre completo<span class="req"> *</span></label>
+          <input class="input" id="np-nombre" placeholder="Nombre y apellidos"/></div>
+        <div class="field"><label>Teléfono<span class="req"> *</span></label>
+          <input class="input" id="np-tel" placeholder="9XXXXXXXX"/></div>
+        <div class="field"><label>WhatsApp</label>
+          <input class="input" id="np-wa" placeholder="9XXXXXXXX"/></div>
+        <div class="field"><label>Correo</label>
+          <input class="input" type="email" id="np-correo" placeholder="correo@ejemplo.com"/></div>
+        <div class="field"><label>Nacionalidad</label>
+          <input class="input" id="np-nac" value="Peruana"/></div>
+        <div class="field"><label>¿Es extranjero?</label>
+          <select class="select" id="np-ext"><option>No</option><option>Sí</option></select></div>
+        <div class="field"><label>Fuente del lead</label>
+          <select class="select" id="np-fuente">
+            ${['Facebook','WhatsApp','TikTok','Referido','Llamada','Cartel','Otro'].map(t=>`<option>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Estado inicial</label>
+          <select class="select" id="np-estado">
+            ${['Nuevo','Contactado','Interesado'].map(t=>`<option>${t}</option>`).join('')}
+          </select></div>
+      </div>
+      <div class="field"><label>Observaciones</label>
+        <textarea class="textarea" id="np-obs" placeholder="Notas sobre el prospecto..."></textarea></div>
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">Requerimiento inicial (opcional)</div>
+        <div class="grid2">
+          <div class="field"><label>Operación buscada</label>
+            <select class="select" id="req-op"><option>Alquiler</option><option>Venta</option></select></div>
+          <div class="field"><label>Tipo de inmueble</label>
+            <select class="select" id="req-tipo">
+              ${['Departamento','Cuarto','Minidepartamento','Casa','Terreno','Oficina','Local','Otros'].map(t=>`<option>${t}</option>`).join('')}
+            </select></div>
+          <div class="field"><label>Presupuesto mín. (S/)</label>
+            <input class="input" type="number" id="req-pmin" placeholder="0"/></div>
+          <div class="field"><label>Presupuesto máx. (S/)</label>
+            <input class="input" type="number" id="req-pmax" placeholder="1000"/></div>
+          <div class="field" style="grid-column:span 2"><label>Zonas de interés</label>
+            <input class="input" id="req-zonas" placeholder="Ej: Callería, Manantay"/></div>
+          <div class="field"><label>Habitaciones mínimas</label>
+            <input class="input" type="number" id="req-hab" value="1"/></div>
+          <div class="field"><label>Cochera</label>
+            <select class="select" id="req-coch"><option>Indiferente</option><option>Sí</option><option>No</option></select></div>
+          <div class="field"><label>Mascotas</label>
+            <select class="select" id="req-masc"><option>Indiferente</option><option>Sí</option><option>No</option></select></div>
+          <div class="field"><label>Tipo de vehículo</label>
+            <select class="select" id="req-veh">
+              <option value="">No aplica</option>
+              ${['Moto lineal','Motocar','Auto','Camioneta'].map(t=>`<option>${t}</option>`).join('')}
+            </select></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-prosp">✓ Guardar prospecto</button>
+    </div>
+  </div>`);
+
+  $('btn-save-prosp').onclick = async () => {
+    const nombre = $('np-nombre').value.trim();
+    const telefono = $('np-tel').value.trim();
+    if (!nombre||!telefono) { alert('Nombre y teléfono son requeridos'); return; }
+    const pmax = +$('req-pmax').value;
+    const requerimiento = pmax ? {
+      operacion:$('req-op').value, tipo_inmueble:$('req-tipo').value,
+      presupuesto_min:+$('req-pmin').value||0, presupuesto_max:pmax,
+      moneda:'S/', zonas:$('req-zonas').value,
+      habitaciones_min:+$('req-hab').value||1, banos_min:1,
+      cochera:$('req-coch').value, tipo_vehiculo:$('req-veh').value||null,
+      mascotas:$('req-masc').value, extranjero:'No', estado:'Activo',
+    } : null;
+    try {
+      $('btn-save-prosp').disabled=true;
+      const res = await POST('/prospectos', {
+        nombre, telefono,
+        whatsapp:$('np-wa').value||telefono,
+        correo:$('np-correo').value,
+        nacionalidad:$('np-nac').value,
+        extranjero:$('np-ext').value==='Sí'?1:0,
+        fuente:$('np-fuente').value,
+        estado:$('np-estado').value,
+        observaciones:$('np-obs').value,
+        requerimiento,
+      });
+      closeModal();
+      await loadData('prospectos');
+      renderPageContent();
+      showToast(`✓ Prospecto ${res.codigo} registrado`);
+    } catch(e) { alert('Error: '+e.message); }
+    finally { const b=$('btn-save-prosp'); if(b){b.disabled=false;} }
+  };
+}
+
+// ── Modal Detalle Prospecto ───────────────────────────────────────────────────
+async function showModalDetalleProsp(id) {
+  let prosp, reqs, matches;
+  try {
+    [prosp, reqs, matches] = await Promise.all([
+      (async()=>{ const p=state.data.prospectos.find(x=>x.id==id); return p; })(),
+      GET('/prospectos/'+id+'/requerimientos'),
+      GET('/matching/prospecto/'+id),
+    ]);
+  } catch(e) { return; }
+  if (!prosp) return;
+
+  showModal(`<div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <div class="modal-title">${prosp.codigo} · ${prosp.nombre}</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+        ${avatar(prosp.nombre, 50)}
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:600">${prosp.nombre}</div>
+          <div style="font-size:13px;color:var(--text2)">${prosp.telefono||''} ${prosp.correo?'· '+prosp.correo:''}</div>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            ${badge(prosp.estado)} ${prosp.extranjero?badge('Extranjero'):''} ${badge(prosp.fuente)}
+          </div>
+        </div>
+        ${prosp.whatsapp?`<a href="https://wa.me/51${prosp.whatsapp}?text=${encodeURIComponent('Hola '+prosp.nombre.split(' ')[0]+', te contactamos de CorredorPro.')}" target="_blank" class="btn btn-success btn-sm">💬 WhatsApp</a>`:''}
+      </div>
+      ${prosp.observaciones?`<div style="font-size:13px;color:var(--text2);background:var(--bg3);border-radius:8px;padding:10px 12px;margin-bottom:16px">${prosp.observaciones}</div>`:''}
+      <div style="margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Cambiar estado</div>
+        <select class="select" id="prosp-estado-sel" style="max-width:220px">
+          ${['Nuevo','Contactado','Interesado','Visita agendada','Visitó','Negociando','Cerrado','Descartado','No interesado','Lista negra'].map(t=>`<option ${prosp.estado===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+        <button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="updateProspEstado(${prosp.id})">Actualizar</button>
+      </div>
+      ${reqs.length>0?`
+      <div style="margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Requerimientos de búsqueda</div>
+        ${reqs.map(r=>`
+          <div style="background:var(--bg3);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:12px">
+            <div style="display:flex;gap:6px;margin-bottom:4px">${badge(r.operacion)} ${badge(r.tipo_inmueble)} ${badge(r.estado)}</div>
+            <div style="color:var(--text2)">Presupuesto: ${fmtMoney(r.presupuesto_min,r.moneda)} – ${fmtMoney(r.presupuesto_max,r.moneda)} · Zonas: ${r.zonas||''}</div>
+            <div style="color:var(--text3);margin-top:3px">${r.habitaciones_min}+ dorm · Cochera: ${r.cochera} · Mascotas: ${r.mascotas}</div>
+          </div>`).join('')}
+      </div>`:''}
+      ${matches.length>0?`
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">⌖ Propiedades compatibles</div>
+        ${matches.slice(0,3).map(m=>`
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;background:var(--bg3);border-radius:8px;padding:8px 12px">
+            <div style="font-size:22px">${m.prop.tipo==='Casa'?'⌂':m.prop.tipo==='Terreno'?'⬚':'▦'}</div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500">${m.prop.titulo}</div>
+              <div style="font-size:11px;color:var(--text3)">${fmtMoney(m.prop.precio,m.prop.moneda)} · ${m.prop.zona||''}</div>
+              <div style="font-size:11px;color:var(--green)">${(m.reasons||[]).slice(0,2).join(' · ')}</div>
+              ${(m.warnings||[]).length?`<div style="font-size:10px;color:var(--amber)">${m.warnings[0]}</div>`:''}
+            </div>
+            ${scoreCircle(m.score)}
+          </div>`).join('')}
+      </div>`:'<div style="font-size:12px;color:var(--text3)">No se encontraron propiedades compatibles disponibles</div>'}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+    </div>
+  </div>`);
+}
+
+async function updateProspEstado(id) {
+  const sel = $('prosp-estado-sel');
+  if (!sel) return;
+  try {
+    await PUT('/prospectos/'+id, {estado:sel.value, ultimo_contacto:today()});
+    const idx = state.data.prospectos.findIndex(p=>p.id==id);
+    if (idx>=0) state.data.prospectos[idx].estado = sel.value;
+    showToast('Estado actualizado');
+    closeModal();
+    renderPageContent();
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+// ── Modal Nueva Cita ──────────────────────────────────────────────────────────
+function showModalNuevaCita() {
+  const prosp = state.data.prospectos.filter(p=>!['Descartado','No interesado','Lista negra'].includes(p.estado));
+  const props = state.data.props.filter(p=>p.estado==='Disponible');
+
+  showModal(`<div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title">Nueva cita / visita</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Título<span class="req"> *</span></label>
+          <input class="input" id="nc-titulo" placeholder="Ej: Visita dpto P-001"/></div>
+        <div class="field"><label>Tipo</label>
+          <select class="select" id="nc-tipo">
+            ${['Visita','Llamada','Reunión','Recordatorio','Seguimiento'].map(t=>`<option>${t}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Prospecto</label>
+          <select class="select" id="nc-prosp">
+            <option value="">Seleccionar...</option>
+            ${prosp.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Propiedad</label>
+          <select class="select" id="nc-prop">
+            <option value="">Ninguna / No aplica</option>
+            ${props.map(p=>`<option value="${p.id}">${p.codigo} – ${p.titulo}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Fecha<span class="req"> *</span></label>
+          <input class="input" type="date" id="nc-fecha" value="${today()}"/></div>
+        <div class="field"><label>Hora</label>
+          <input class="input" type="time" id="nc-hora" value="10:00"/></div>
+        <div class="field"><label>Duración (min)</label>
+          <input class="input" type="number" id="nc-dur" value="60"/></div>
+        <div class="field"><label>Estado</label>
+          <select class="select" id="nc-estado"><option>Pendiente</option><option>Confirmado</option></select></div>
+      </div>
+      <div class="field"><label>Ubicación / Referencia</label>
+        <input class="input" id="nc-ubic" placeholder="Dirección o referencia del lugar..."/></div>
+      <div class="field"><label>Notas</label>
+        <textarea class="textarea" id="nc-notas" rows="3" placeholder="Instrucciones especiales, cosas a recordar..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-cita">✓ Guardar cita</button>
+    </div>
+  </div>`);
+
+  $('btn-save-cita').onclick = async () => {
+    const titulo = $('nc-titulo').value.trim();
+    const fecha = $('nc-fecha').value;
+    if (!titulo||!fecha) { alert('Título y fecha son requeridos'); return; }
+    try {
+      $('btn-save-cita').disabled=true;
+      await POST('/citas', {
+        titulo, tipo:$('nc-tipo').value,
+        prospecto_id:+$('nc-prosp').value||null,
+        propiedad_id:+$('nc-prop').value||null,
+        fecha, hora:$('nc-hora').value,
+        duracion:+$('nc-dur').value||60,
+        ubicacion:$('nc-ubic').value,
+        notas:$('nc-notas').value,
+        estado:$('nc-estado').value,
+        confirmado_cliente:0,
+      });
+      closeModal();
+      await loadData('citas');
+      renderPageContent();
+      showToast('✓ Cita registrada');
+    } catch(e) { alert('Error: '+e.message); }
+    finally { const b=$('btn-save-cita'); if(b){b.disabled=false;} }
+  };
+}
+
+async function updateCitaEstado(estado, id) {
+  try { await PUT('/citas/'+id, {estado}); showToast('Estado actualizado'); }
+  catch(e) { console.error(e); }
+}
+
+// ── Modal Nuevo Seguimiento ───────────────────────────────────────────────────
+function showModalNuevoSeg() {
+  const prosp = state.data.prospectos;
+  const props = state.data.props;
+
+  showModal(`<div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title">Registrar seguimiento</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Tipo de contacto</label>
+        <select class="select" id="ns-tipo">
+          ${['Llamada','WhatsApp','Visita','Email','Nota','Propuesta'].map(t=>`<option>${t}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Prospecto<span class="req"> *</span></label>
+        <select class="select" id="ns-prosp">
+          <option value="">Seleccionar prospecto...</option>
+          ${prosp.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Propiedad (opcional)</label>
+        <select class="select" id="ns-prop">
+          <option value="">Ninguna</option>
+          ${props.map(p=>`<option value="${p.id}">${p.codigo} – ${p.titulo}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Fecha</label>
+        <input class="input" type="date" id="ns-fecha" value="${today()}"/></div>
+      <div class="field"><label>Descripción<span class="req"> *</span></label>
+        <textarea class="textarea" id="ns-nota" rows="4" placeholder="¿Qué pasó en este contacto? ¿Qué dijo el cliente?"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-seg">✓ Guardar seguimiento</button>
+    </div>
+  </div>`);
+
+  $('btn-save-seg').onclick = async () => {
+    const nota = $('ns-nota').value.trim();
+    const prospId = $('ns-prosp').value;
+    if (!nota||!prospId) { alert('Prospecto y descripción son requeridos'); return; }
+    try {
+      $('btn-save-seg').disabled=true;
+      await POST('/seguimientos', {
+        tipo:$('ns-tipo').value,
+        prospecto_id:+prospId,
+        propiedad_id:+$('ns-prop').value||null,
+        fecha:$('ns-fecha').value,
+        nota,
+      });
+      closeModal();
+      await loadData('seguimientos');
+      renderPageContent();
+      showToast('✓ Seguimiento registrado');
+    } catch(e) { alert('Error: '+e.message); }
+    finally { const b=$('btn-save-seg'); if(b){b.disabled=false;} }
+  };
+}
+
+// ── Modal Nuevo Usuario ────────────────────────────────────────────────────────
+function showModalNuevoUsuario() {
+  showModal(`<div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">Nuevo usuario</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Nombre<span class="req"> *</span></label>
+        <input class="input" id="nu-nombre" placeholder="Nombre completo"/></div>
+      <div class="field"><label>Correo<span class="req"> *</span></label>
+        <input class="input" type="email" id="nu-correo" placeholder="correo@ejemplo.com"/></div>
+      <div class="field"><label>Contraseña<span class="req"> *</span></label>
+        <input class="input" type="password" id="nu-pass" placeholder="Mínimo 6 caracteres"/></div>
+      <div class="field"><label>Rol</label>
+        <select class="select" id="nu-rol"><option value="corredor">Corredor</option><option value="admin">Administrador</option></select></div>
+      <div class="field"><label>ID de corredor (número)</label>
+        <input class="input" type="number" id="nu-cid" placeholder="Ej: 3"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-user">✓ Crear usuario</button>
+    </div>
+  </div>`);
+
+  $('btn-save-user').onclick = async () => {
+    const nombre=$('nu-nombre').value.trim(), correo=$('nu-correo').value.trim(), pass=$('nu-pass').value;
+    if (!nombre||!correo||!pass) { alert('Completa todos los campos requeridos'); return; }
+    try {
+      $('btn-save-user').disabled=true;
+      await POST('/usuarios', {nombre, correo, password:pass, rol:$('nu-rol').value, corredor_id:+$('nu-cid').value||null});
+      closeModal();
+      await loadData('usuarios');
+      renderPageContent();
+      showToast('✓ Usuario creado');
+    } catch(e) { alert('Error: '+e.message); }
+    finally { const b=$('btn-save-user'); if(b){b.disabled=false;} }
+  };
+}
+
+// ── WhatsApp Helper ───────────────────────────────────────────────────────────
+async function showModalWhatsApp(citaId) {
+  const cita = state.data.citas.find(c=>c.id==citaId);
+  if (!cita) return;
+  const plantillas = state.data.plantillas || [];
+  const plantilla = plantillas.find(p=>p.tipo==='recordatorio') || plantillas[0];
+  let msg = plantilla?.contenido || 'Hola {{nombre}}, recordatorio de tu visita el {{fecha}} a las {{hora}}. Ubicación: {{ubicacion}}.';
+  msg = msg
+    .replace('{{nombre}}', (cita.prospecto_nombre||'').split(' ')[0])
+    .replace('{{tipo}}', (cita.tipo||'visita').toLowerCase())
+    .replace('{{predio}}', cita.propiedad_titulo || 'inmueble a coordinar')
+    .replace('{{fecha}}', cita.fecha||'')
+    .replace('{{hora}}', cita.hora||'')
+    .replace('{{ubicacion}}', cita.ubicacion || 'Por confirmar');
+
+  showModal(`<div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title">💬 Enviar recordatorio por WhatsApp</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info">
+        <span>💬</span><div>Se abrirá WhatsApp con el mensaje prellenado. Puedes editarlo antes de enviar.</div>
+      </div>
+      <div class="field"><label>Para: ${cita.prospecto_nombre||''} (${cita.prospecto_wa||'Sin WhatsApp'})</label></div>
+      <div class="field"><label>Mensaje</label>
+        <textarea class="textarea" id="wa-msg" rows="6">${msg}</textarea></div>
+      <div class="field"><label>Plantilla</label>
+        <select class="select" id="wa-plant" onchange="updateWAMsg(this)">
+          ${plantillas.map(p=>`<option value="${p.contenido}">${p.nombre}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" onclick="enviarWA('${cita.prospecto_wa}', '${cita.prospecto_nombre}', '${cita.propiedad_titulo||''}', '${cita.fecha}', '${cita.hora}', '${cita.ubicacion||''}')">💬 Abrir WhatsApp</button>
+    </div>
+  </div>`);
+}
+
+function updateWAMsg(sel) {
+  const msg = $('wa-msg');
+  if (msg) msg.value = sel.value;
+}
+
+function enviarWA(wa, nombre, predio, fecha, hora, ubic) {
+  const msg = ($('wa-msg')?.value || '').trim();
+  if (!wa) { alert('Este prospecto no tiene WhatsApp registrado'); return; }
+  const num = wa.replace(/\D/g,'');
+  window.open(`https://wa.me/51${num}?text=${encodeURIComponent(msg)}`, '_blank');
+  closeModal();
+  showToast('📤 Abriendo WhatsApp...');
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;z-index:9999;animation:fadeIn .2s;box-shadow:0 4px 20px rgba(0,0,0,.2)';
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2800);
+}
+
+// ─── DATA LOADING ─────────────────────────────────────────────────────────────
+async function loadData(which) {
+  try {
+    if (which==='all' || which==='dashboard') {
+      state.data.dashboard = await GET('/dashboard');
+    }
+    if (which==='all' || which==='props') {
+      state.data.props = await GET('/propiedades');
+    }
+    if (which==='all' || which==='prospectos') {
+      state.data.prospectos = await GET('/prospectos');
+    }
+    if (which==='all' || which==='citas') {
+      state.data.citas = await GET('/citas');
+    }
+    if (which==='all' || which==='seguimientos') {
+      state.data.seguimientos = await GET('/seguimientos');
+    }
+    if (which==='all' || which==='matching') {
+      const min = state.matchMin || 40;
+      state.data.matches = await GET('/matching?min='+min);
+    }
+    if (which==='all' || which==='plantillas') {
+      state.data.plantillas = await GET('/plantillas');
+    }
+    if ((which==='all' || which==='usuarios') && state.user?.rol==='admin') {
+      state.data.usuarios = await GET('/usuarios');
+    }
+  } catch(e) { console.error('loadData error:', e); }
+}
+
+async function loadPageData() {
+  const map = {
+    dashboard:'dashboard',
+    propiedades:'props',
+    prospectos:'prospectos',
+    citas:'citas',
+    seguimientos:'seguimientos',
+    matching:'matching',
+    admin:'usuarios',
+  };
+  await loadData(map[state.page] || 'all');
+  if (state.page==='citas' && !state.data.plantillas?.length) await loadData('plantillas');
+}
+
+// ─── BINDINGS ─────────────────────────────────────────────────────────────────
+function bindLogin() {
+  const btn = $('l-btn');
+  const submit = async () => {
+    const correo = $('l-correo').value.trim();
+    const password = $('l-pass').value;
+    btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+    try {
+      const res = await POST('/auth/login', {correo, password});
+      state.user = res.user;
+      await loadData('all');
+      render();
+    } catch(e) {
+      const err=$('l-err'); err.style.display='block'; err.textContent=e.message;
+    } finally { btn.disabled=false; btn.innerHTML='Iniciar sesión'; }
+  };
+  btn.onclick = submit;
+  $('l-pass').onkeydown = e => { if(e.key==='Enter') submit(); };
+}
+
+function toggleSidebar() {
+  state.sidebarOpen = !state.sidebarOpen;
+  const sb = $('sidebar');
+  const ov = $('sidebar-overlay');
+  const bg = $('burger');
+  if (sb) sb.classList.toggle('open', state.sidebarOpen);
+  if (ov) ov.classList.toggle('visible', state.sidebarOpen);
+  if (bg) bg.classList.toggle('active', state.sidebarOpen);
+}
+
+function closeSidebarMobile() {
+  if (window.innerWidth <= 768 && state.sidebarOpen) toggleSidebar();
+}
+
+function renderPageContent() {
+  const pc = $('page-content');
+  if (!pc) return;
+  pc.innerHTML = renderPage();
+  pc.className = 'animate-in';
+  bindPageEvents();
+  // Sync bottom nav active state
+  document.querySelectorAll('.bnav-item').forEach(x=>x.classList.toggle('active', x.dataset.bnav===state.page));
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active', x.dataset.page===state.page));
+}
+
+function bindPage() {
+  // Sidebar
+  document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+    el.onclick = async () => {
+      state.page = el.dataset.page;
+      closeSidebarMobile();
+      await loadPageData();
+      renderPageContent();
+      document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active', x.dataset.page===state.page));
+      document.querySelectorAll('.bnav-item').forEach(x=>x.classList.toggle('active', x.dataset.bnav===state.page));
+    };
+  });
+  // Bottom nav (móvil)
+  document.querySelectorAll('.bnav-item[data-bnav]').forEach(el => {
+    el.onclick = async () => {
+      state.page = el.dataset.bnav;
+      closeSidebarMobile();
+      await loadPageData();
+      renderPageContent();
+      // Actualizar estado activo en sidebar y bottom nav
+      document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active', x.dataset.page===state.page));
+      document.querySelectorAll('.bnav-item').forEach(x=>x.classList.toggle('active', x.dataset.bnav===state.page));
+    };
+  });
+
+  $('logout-btn')?.addEventListener('click', async () => {
+    await POST('/auth/logout', {});
+    state.user = null;
+    state.data = {props:[],prospectos:[],citas:[],seguimientos:[],reqs:{},dashboard:{},plantillas:[]};
+    render();
+  });
+  bindPageEvents();
+}
+
+function bindPageEvents() {
+  const page = state.page;
+
+  // Props
+  if (page === 'propiedades') {
+    const btnNuevaManual = $('btn-nueva-manual');
+    if (btnNuevaManual) btnNuevaManual.onclick = () => showModalPropManual();
+
+    const btnNuevaAI = $('btn-nueva-ai');
+    if (btnNuevaAI) btnNuevaAI.onclick = () => showModalIA();
+
+    document.querySelectorAll('[data-prop-id]').forEach(el => {
+      el.onclick = () => showModalDetalleProp(el.dataset.propId);
+    });
+
+    ['f-tipo', 'f-op', 'f-estado'].forEach(id => {
+      const elem = $(id);
+      if (elem) elem.addEventListener('change', filterProps);
+    });
+
+    const fZona = $('f-zona');
+    if (fZona) fZona.addEventListener('input', filterProps);
+  }
+
+  // Prospectos
+  if (page === 'prospectos') {
+    const btnNuevoProsp = $('btn-nuevo-prosp');
+    if (btnNuevoProsp) btnNuevoProsp.onclick = () => showModalNuevoProsp();
+
+    document.querySelectorAll('[data-prosp-id]').forEach(el => {
+      el.onclick = (e) => {
+        if (e.target.classList.contains('btn-wa')) return;
+        showModalDetalleProsp(el.dataset.prospId);
+      };
+    });
+
+    document.querySelectorAll('.btn-wa').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        const wa = el.dataset.wa;
+        const nombre = el.dataset.nombre;
+        if (wa) {
+          window.open(
+            `https://wa.me/51${wa}?text=${encodeURIComponent('Hola ' + nombre.split(' ')[0] + ', te contactamos de CorredorPro. ¿Tienes un momento?')}`,
+            '_blank'
+          );
+        }
+      };
+    });
+
+    ['pf-estado', 'pf-fuente'].forEach(id => {
+      const elem = $(id);
+      if (elem) elem.addEventListener('change', filterProsp);
+    });
+  }
+
+  // Citas
+  if (page === 'citas') {
+    const btnNuevaCita = $('btn-nueva-cita');
+    if (btnNuevaCita) btnNuevaCita.onclick = () => showModalNuevaCita();
+
+    document.querySelectorAll('.btn-wa-cita').forEach(el => {
+      el.onclick = () => showModalWhatsApp(el.dataset.citaId);
+    });
+  }
+
+  // Seguimientos
+  if (page === 'seguimientos') {
+    const btnNuevoSeg = $('btn-nuevo-seg');
+    if (btnNuevoSeg) btnNuevoSeg.onclick = () => showModalNuevoSeg();
+  }
+
+  // Matching
+  if (page === 'matching') {
+    const matchSlider = $('match-slider');
+    if (matchSlider) {
+      matchSlider.addEventListener('input', async e => {
+        state.matchMin = +e.target.value;
+        await loadData('matching');
+        renderPageContent();
+      });
+    }
+
+    document.querySelectorAll('[data-min]').forEach(el => {
+      el.onclick = async () => {
+        state.matchMin = +el.dataset.min;
+        await loadData('matching');
+        renderPageContent();
+      };
+    });
+  }
+
+  // Admin
+  if (page === 'admin') {
+    const btnNuevoUsuario = $('btn-nuevo-usuario');
+    if (btnNuevoUsuario) btnNuevoUsuario.onclick = () => showModalNuevoUsuario();
+  }
+}
+
+function filterProps() {
+  const tipo = $('f-tipo')?.value || '';
+  const op = $('f-op')?.value || '';
+  const estado = $('f-estado')?.value || '';
+  const zona = ($('f-zona')?.value || '').toLowerCase();
+  const filtered = state.data.props.filter(p =>
+    (!tipo || p.tipo===tipo) &&
+    (!op || p.operacion===op) &&
+    (!estado || p.estado===estado) &&
+    (!zona || (p.zona||'').toLowerCase().includes(zona) || (p.distrito||'').toLowerCase().includes(zona))
+  );
+  const list = $('props-list');
+  if (list) list.innerHTML = filtered.length===0?
+    '<div style="text-align:center;padding:40px;color:var(--text3)">No hay propiedades que coincidan con los filtros</div>':
+    filtered.map(renderPropCard).join('');
+  // Re-bind clicks
+  document.querySelectorAll('[data-prop-id]').forEach(el => {
+    el.onclick = () => showModalDetalleProp(el.dataset.propId);
+  });
+}
+
+function filterProsp() {
+  const estado = $('pf-estado')?.value || '';
+  const fuente = $('pf-fuente')?.value || '';
+  const filtered = state.data.prospectos.filter(p =>
+    (!estado || p.estado===estado) && (!fuente || p.fuente===fuente)
+  );
+  const list = $('prosp-list');
+  if (list) list.innerHTML = filtered.length===0?
+    '<div style="text-align:center;padding:40px;color:var(--text3)">No hay prospectos que coincidan</div>':
+    filtered.map(renderProspCard).join('');
+  document.querySelectorAll('[data-prosp-id]').forEach(el => {
+    el.onclick = (e) => { if (!e.target.classList.contains('btn-wa')) showModalDetalleProsp(el.dataset.prospId); };
+  });
+  document.querySelectorAll('.btn-wa').forEach(el => {
+    el.onclick = e => {
+      e.stopPropagation();
+      const wa = el.dataset.wa;
+      if (wa) window.open(`https://wa.me/51${wa}?text=${encodeURIComponent('Hola '+el.dataset.nombre.split(' ')[0]+', te contactamos de CorredorPro.')}`, '_blank');
+    };
+  });
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const me = await GET('/auth/me');
+    state.user = me;
+    await loadData('all');
+  } catch(e) {
+    state.user = null;
+  }
+  render();
+})();
+</script>
+</body>
+</html>

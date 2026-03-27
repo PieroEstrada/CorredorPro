@@ -1,0 +1,11 @@
+# Seguridad: impedir ejecución de scripts PHP en uploads
+Options -Indexes
+
+# Deshabilitar PHP en toda esta carpeta
+php_flag engine off
+
+# Bloquear ejecución de cualquier script
+<FilesMatch "(?i)\.(php\d?|phtml|shtml|pl|py|cgi|sh|bash|exe)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
