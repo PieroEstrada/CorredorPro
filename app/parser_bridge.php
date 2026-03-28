@@ -284,7 +284,8 @@ function cp_php_empty_result(): array
         'cochera' => null, 'tipo_cochera' => null, 'cantidad_vehiculos' => null,
         'seguridad' => null, 'rejas' => null, 'porton' => null,
         'internet_incluido' => null, 'mantenimiento_incluido' => null,
-        'agua_incluida' => null, 'agua_monto' => null,
+        'agua_incluida' => null, 'agua_monto' => null, 'agua_a_consumo' => null,
+        'servicios_incluidos' => [],
         'luz' => null, 'luz_monto' => null,
         'mascotas' => 'No especificado', 'extranjeros' => false,
         'nacionalidades_aceptadas' => [], 'ninos_permitidos' => 'No especificado',
@@ -525,6 +526,9 @@ function cp_php_extract_servicios(string $s, array &$result): void
     // Agua incluida
     if (preg_match('/agua.*incluid|incluye.{0,20}agua|incluyen servicio de agua/i', $s)) {
         cp_php_set($result, 'agua_incluida', true, 'agua incluida');
+    } elseif (preg_match('/agua\s+a\s+consumo|agua\s+seg[uú]n\s+consumo|recibo\s+de\s+agua/i', $s)) {
+        cp_php_set($result, 'agua_incluida', false, 'agua a consumo');
+        cp_php_set($result, 'agua_a_consumo', true, 'agua a consumo');
     } elseif (preg_match('/agua\s*[:\-]?\s*(?:s\/)?\s*([\d.,]+(?:\s*mil)?)\s*soles?/i', $s, $m)) {
         $v = cp_php_parse_number($m[1]);
         if ($v !== null) {

@@ -3,12 +3,25 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 
-function cp_auth_attempt(string $correo, string $password): ?array
+/**
+ * Intenta autenticar por correo electrónico o nombre de usuario.
+ * $login puede ser un email o un username.
+ */
+function cp_auth_attempt(string $login, string $password): ?array
 {
     cp_boot_session();
-    $db   = cp_db();
-    $stmt = $db->prepare('SELECT * FROM usuarios WHERE correo = ? AND activo = 1 LIMIT 1');
-    $stmt->execute([$correo]);
+    $db = cp_db();
+
+    // Buscar por correo primero; si no hay @, también buscar por username
+    if (str_contains($login, '@')) {
+        $stmt = $db->prepare('SELECT * FROM usuarios WHERE correo = ? AND activo = 1 LIMIT 1');
+        $stmt->execute([$login]);
+    } else {
+        $stmt = $db->prepare(
+            'SELECT * FROM usuarios WHERE (username = ? OR correo = ?) AND activo = 1 LIMIT 1'
+        );
+        $stmt->execute([$login, $login]);
+    }
     $user = $stmt->fetch();
 
     if (!$user || !password_verify($password, (string) $user['password_hash'])) {

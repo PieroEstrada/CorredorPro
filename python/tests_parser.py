@@ -541,7 +541,379 @@ class TestAgua:
         assert r["agua_incluida"] is True
 
 
+# =============================================================================
+# CASOS DE PRUEBA v2 — Los 5 anuncios reales del enunciado
+# =============================================================================
+
+CASO_1 = """
+Casa amplia, cómoda y segura, perfecta para quienes buscan tranquilidad, espacio y una excelente ubicación, sin pagar de más.
+
+🔑 ¿QUÉ LA HACE IDEAL PARA TI?
+✔️ Precio económico (más espacio por menos dinero)
+✔️ Hermoso jardín y patio amplio 🌿
+✔️ Cochera grande para 2 camionetas 🚗🚙
+✔️ Aire acondicionado para tu máximo confort ❄️
+✔️ 2 habitaciones + oficina (ideal para Oficina en Casa)
+✔️ Cocina moderna y funcional
+✔️ 1 Baño completo.
+✔️ Zona de lavandería
+✔️ Ubicación estratégica, cerca al mercado minorista y mayorista.
+✔️ Zona libre de ruidos, perfecta para descansar 😌
+
+💡 Vive cómodo, seguro y sin estrés, en una casa pensada para tu bienestar y el de tu familia.
+
+✅Ubicación:
+Frente a Planta de la Coca Cola, cerca al mercado minorista y mayorista, terminal terrestre - km 6, Pucallpa
+
+✅Servicios:
+🔹Agua y mantenimiento del césped esta incluido en el alquiler.
+🔹Luz: medidor propio, a consumo.
+
+✅Condiciones: 1 mes adelantado y 1 mes de garantía, contrato por 1 año.
+
+✅ Tarifa Mensual: 1,200 soles.
+"""
+
+CASO_2 = """
+Hermosa casa en alquiler en Pucallpa, perfecta para quienes buscan tranquilidad, comodidad y un entorno natural, sin pagar de más.
+
+📍 Ubicada en el km 5, junto al Hotel Manish Ecology – Pucallpa.
+😍 Zona libre de ruidos, con 100% contacto con la naturaleza 🐦🌿
+Ideal para vivir con paz, privacidad y aire puro.
+
+🌿 ¿POR QUÉ ESTA CASA ES IDEAL PARA TI?
+✔️ Precio accesible 💰
+✔️ 3 habitaciones amplias (principal con baño propio)
+✔️ Aire acondicionado en las 3 habitaciones ❄️
+✔️ Closets empotrados en todas las habitaciones
+✔️ Amplio patio para disfrutar al aire libre 🌳
+✔️ Cochera amplia y segura 🚗
+✔️ Lavandería independiente
+✔️ Terraza perfecta para descansar ☕
+
+PRECIO: 3,000 soles
+incluyen servicio de agua, desagüe, mantenimiento de áreas verdes, recojo de basura, vigilancia privada las 24 horas, teléfono en garita.
+
+📋 Condición: 1 mes adelantado + uno de garantía.
+
+📲 Escríbenos ahora y agenda tu visita
+"""
+
+CASO_3 = """
+🏡 DEPARTAMENTO DE ESTRENO EN ALQUILER POR AV. CENTENARIO.
+
+Se alquila moderno departamento en segundo piso, totalmente de estreno, ideal para quienes buscan comodidad, buena ubicación y un espacio funcional.
+
+📍 Ubicación estratégica: Sector mercado Micaela
+• A dos cuadras del Mercado Micaela
+• Detrás de la planta de Petroperú
+• A una cuadra de la Av. Centenario
+• A 3 cuadras del Real Plaza
+
+🛏 Distribución del departamento:
+• 2 habitaciones
+• Área de sala comedor con ventana con vista a la calle
+• Área de cocina
+• 1 baño completo
+• Espacio para conectar lavadora
+• Área de tendal
+• Cochera para moto
+
+💡 Servicios:
+• Luz: según consumo del inquilino
+• Agua: S/ 30 mensuales
+• Otros servicios: aparte
+
+💰 Precio: S/ 1,200 mensuales
+📌 Condiciones:
+• 1 mes de adelanto
+• 1 mes de garantía
+• Contrato mínimo por 1 año
+
+Una excelente opción para vivir en una zona accesible y comercial, con la tranquilidad de un departamento nuevo y listo para estrenar.
+"""
+
+CASO_4 = """
+¡𝗢𝗣𝗢𝗥𝗧𝗨𝗡𝗜𝗗𝗔𝗗 𝗗𝗘 𝗟𝗢𝗖𝗔𝗟 𝗖𝗢𝗠𝗘𝗥𝗖𝗜𝗔𝗟 𝗘𝗡 𝗔𝗟𝗤𝗨𝗜𝗟𝗘𝗥 𝗘𝗡 𝗭𝗢𝗡𝗔 𝗘𝗦𝗧𝗥𝗔𝗧𝗘́𝗚𝗜𝗖𝗔❗ ✨
+
+Se alquila amplio local comercial de 32 m² (4x8), ideal para emprender o hacer crecer tu negocio en una zona con buen tránsito y fácil acceso.
+
+📍 𝗨𝗯𝗶𝗰𝗮𝗰𝗶𝗼́𝗻 𝗽𝗿𝗶𝘃𝗶𝗹𝗲𝗴𝗶𝗮𝗱𝗮:
+Av. 5 Esquinas – Asentamiento Humano Micaela Bastidas, a pocas cuadras de Essalud.
+
+🔹 𝗖𝗮𝗿𝗮𝗰𝘁𝗲𝗿𝗶́𝘀𝘁𝗶𝗰𝗮𝘀 𝗱𝗲𝗹 𝗹𝗼𝗰𝗮𝗹:
+✔️ Área total de 32 m² (4x8)
+✔️ Pozo a tierra (seguridad eléctrica)
+✔️ 2 ventiladores de techo
+✔️ 1 baño.
+✔️ Puerta con reja de fierro reforzado (mayor seguridad)
+
+💡 𝗦𝗲𝗿𝘃𝗶𝗰𝗶𝗼𝘀:
+✔️ Agua incluida
+✔️ Luz independiente (pago según consumo)
+💰 Precio: S/ 900 mensuales
+
+📄 𝗖𝗼𝗻𝗱𝗶𝗰𝗶𝗼𝗻𝗲𝘀:
+✔️ Contrato mínimo de 1 año
+✔️ Modalidad 1x1 (1 mes de adelanto + 1 mes de garantía)
+"""
+
+CASO_5 = """
+🌴🏠 HERMOSO DEPARTAMENTO AMOBLADO CON PISCINA EN PUCALLPA! 🚨
+
+Vive con comodidad y estilo en una zona estratégica de la ciudad, ubicado a solo 5 minutos de los principales centros comerciales, zonas de entretenimiento y diversión; el departamento se encuentra en un segundo piso, ubicado cerca al cruce de Jr. Iparia con arborización.
+
+✨ Características del departamento:
+
+✅ 2 habitaciones con cama 🛏️ y clóset.
+✅ Sala kitchenette totalmente equipada 🛋️ (cocina, refrigerador, horno microondas y mesa de comedor).
+✅ 2 terrazas ideales para descansar o compartir.
+✅ 1 baño completo 🚽🚿
+✅ Aire acondicionado en 1 habitación y en la sala.
+
+🌊 Áreas comunes:
+🏊 Piscina
+🌲 Terraza
+🚗 Cochera para carro con portón automático
+
+💰 Costo mensual: S/ 2,100
+🔐 Condiciones: 1 mes de adelanto + 1 mes de garantía
+📄 Contrato mínimo por 1 año
+💧 Incluye servicio de agua
+🚨 Demás servicios por cuenta del inquilino.
+
+📋 El departamento se encuentra dentro de una casa tipo condominio, en un ambiente tranquilo, privado y seguro.
+"""
+
+
+class TestCaso1:
+    """Casa con cochera 2 camionetas, agua incluida, 1x1, precio 1200."""
+
+    def setup_method(self):
+        self.r = extract_parser(CASO_1)
+
+    def test_tipo(self):
+        assert self.r["tipo"] == "Casa"
+
+    def test_operacion(self):
+        assert self.r["operacion"] == "Alquiler"
+
+    def test_precio(self):
+        assert self.r["precio"] == 1200.0
+
+    def test_cochera(self):
+        assert self.r["cochera"] is True
+
+    def test_tipo_cochera_contiene_camioneta(self):
+        tc = (self.r["tipo_cochera"] or "").lower()
+        assert "camioneta" in tc
+
+    def test_cantidad_vehiculos(self):
+        assert self.r["cantidad_vehiculos"] == 2
+
+    def test_agua_incluida(self):
+        assert self.r["agua_incluida"] is True
+
+    def test_agua_monto_nulo(self):
+        assert self.r["agua_monto"] is None
+
+    def test_luz_consumo(self):
+        assert self.r["luz"] == "a consumo"
+
+    def test_adelanto(self):
+        assert self.r["condiciones"]["mes_adelantado"] == 1
+
+    def test_garantia(self):
+        assert self.r["condiciones"]["mes_garantia"] == 1
+
+    def test_mascotas_default(self):
+        # No se menciona mascotas → No especificado
+        assert self.r["mascotas"] == "No especificado"
+
+    def test_habitaciones(self):
+        assert self.r["habitaciones"] == 2
+
+
+class TestCaso2:
+    """Casa con cochera genérica, agua+servicios incluidos, 1+uno de garantía, 3000."""
+
+    def setup_method(self):
+        self.r = extract_parser(CASO_2)
+
+    def test_tipo(self):
+        assert self.r["tipo"] == "Casa"
+
+    def test_operacion(self):
+        assert self.r["operacion"] == "Alquiler"
+
+    def test_precio(self):
+        assert self.r["precio"] == 3000.0
+
+    def test_cochera(self):
+        assert self.r["cochera"] is True
+
+    def test_agua_incluida(self):
+        assert self.r["agua_incluida"] is True
+
+    def test_servicios_incluidos_tiene_agua(self):
+        svcs = " ".join(self.r.get("servicios_incluidos", [])).lower()
+        assert "agua" in svcs
+
+    def test_adelanto(self):
+        assert self.r["condiciones"]["mes_adelantado"] == 1
+
+    def test_garantia(self):
+        assert self.r["condiciones"]["mes_garantia"] == 1
+
+    def test_mascotas_default(self):
+        assert self.r["mascotas"] == "No especificado"
+
+    def test_habitaciones(self):
+        assert self.r["habitaciones"] == 3
+
+
+class TestCaso3:
+    """Departamento 2do piso, cochera moto, agua S/30, 1x1, 1200."""
+
+    def setup_method(self):
+        self.r = extract_parser(CASO_3)
+
+    def test_tipo(self):
+        assert self.r["tipo"] == "Departamento"
+
+    def test_piso(self):
+        assert self.r["piso"] == 2
+
+    def test_precio(self):
+        assert self.r["precio"] == 1200.0
+
+    def test_cochera(self):
+        assert self.r["cochera"] is True
+
+    def test_tipo_cochera_moto(self):
+        tc = (self.r["tipo_cochera"] or "").lower()
+        assert "moto" in tc
+
+    def test_agua_no_incluida(self):
+        assert self.r["agua_incluida"] is False
+
+    def test_agua_monto(self):
+        assert self.r["agua_monto"] == 30.0
+
+    def test_luz_consumo(self):
+        assert self.r["luz"] == "a consumo"
+
+    def test_adelanto(self):
+        assert self.r["condiciones"]["mes_adelantado"] == 1
+
+    def test_garantia(self):
+        assert self.r["condiciones"]["mes_garantia"] == 1
+
+    def test_habitaciones(self):
+        assert self.r["habitaciones"] == 2
+
+
+class TestCaso4:
+    """Local comercial, sin cochera, agua incluida, modalidad 1x1, 900."""
+
+    def setup_method(self):
+        self.r = extract_parser(CASO_4)
+
+    def test_tipo(self):
+        assert self.r["tipo"] == "Local"
+
+    def test_operacion(self):
+        assert self.r["operacion"] == "Alquiler"
+
+    def test_precio(self):
+        assert self.r["precio"] == 900.0
+
+    def test_cochera_no_mencionada(self):
+        # No se menciona cochera en este caso
+        assert not self.r["cochera"]
+
+    def test_agua_incluida(self):
+        assert self.r["agua_incluida"] is True
+
+    def test_luz_consumo(self):
+        assert self.r["luz"] == "a consumo"
+
+    def test_adelanto(self):
+        assert self.r["condiciones"]["mes_adelantado"] == 1
+
+    def test_garantia(self):
+        assert self.r["condiciones"]["mes_garantia"] == 1
+
+    def test_area(self):
+        assert self.r["area"] == 32.0
+
+
+class TestCaso5:
+    """Departamento 2do piso amoblado, cochera carro portón, agua incluida, 1x1, 2100."""
+
+    def setup_method(self):
+        self.r = extract_parser(CASO_5)
+
+    def test_tipo(self):
+        assert self.r["tipo"] == "Departamento"
+
+    def test_piso(self):
+        assert self.r["piso"] == 2
+
+    def test_precio(self):
+        assert self.r["precio"] == 2100.0
+
+    def test_cochera(self):
+        assert self.r["cochera"] is True
+
+    def test_tipo_cochera_carro(self):
+        tc = (self.r["tipo_cochera"] or "").lower()
+        assert "carro" in tc or "auto" in tc
+
+    def test_porton(self):
+        assert self.r["porton"] is True
+
+    def test_agua_incluida(self):
+        assert self.r["agua_incluida"] is True
+
+    def test_adelanto(self):
+        assert self.r["condiciones"]["mes_adelantado"] == 1
+
+    def test_garantia(self):
+        assert self.r["condiciones"]["mes_garantia"] == 1
+
+    def test_mascotas_default(self):
+        assert self.r["mascotas"] == "No especificado"
+
+    def test_amoblado(self):
+        assert self.r["amoblado"] is True
+
+    def test_habitaciones(self):
+        assert self.r["habitaciones"] == 2
+
+
 # ─── Ejecución directa (sin pytest) ──────────────────────────────────────────
+
+def _print_result(nombre: str, r: dict) -> None:
+    print(f"\n{'='*60}")
+    print(f"{nombre}")
+    print(f"  tipo              : {r['tipo']}")
+    print(f"  operacion         : {r['operacion']}")
+    print(f"  precio            : {r['precio']} {r['moneda']}")
+    print(f"  piso              : {r['piso']}")
+    print(f"  habitaciones      : {r['habitaciones']}  banos: {r['banos']}")
+    print(f"  agua              : incluida={r['agua_incluida']}  monto={r['agua_monto']}  consumo={r['agua_a_consumo']}  24h={r['agua_24h']}")
+    print(f"  luz               : {r['luz']}")
+    print(f"  cochera           : {r['cochera']} tipo={r['tipo_cochera']} cant={r['cantidad_vehiculos']}")
+    print(f"  internet          : {r['internet_incluido']}")
+    print(f"  mascotas          : {r['mascotas']}")
+    print(f"  servicios_inc     : {r.get('servicios_incluidos', [])}")
+    print(f"  condicion         : adelanto={r['condiciones']['mes_adelantado']}  "
+          f"garantia={r['condiciones']['mes_garantia']}  "
+          f"contrato={r['condiciones']['contrato_minimo']}")
+    print(f"  faltantes         : {r['faltantes']}")
+    print(f"  advertencias      : {r['advertencias']}")
+
 
 if __name__ == "__main__":
     ejemplos = [
@@ -549,27 +921,12 @@ if __name__ == "__main__":
         ("Ejemplo 2 - Departamento 3er piso", EJEMPLO_2),
         ("Ejemplo 3 - Casa condominio", EJEMPLO_3),
         ("Ejemplo 4 - Terreno Yarinacocha", EJEMPLO_4),
+        ("CASO 1 - Casa cochera 2 camionetas", CASO_1),
+        ("CASO 2 - Casa servicios incluidos", CASO_2),
+        ("CASO 3 - Depto 2do piso cochera moto", CASO_3),
+        ("CASO 4 - Local comercial 1x1", CASO_4),
+        ("CASO 5 - Depto amoblado cochera carro", CASO_5),
     ]
-    for i, (nombre, texto) in enumerate(ejemplos, 1):
+    for nombre, texto in ejemplos:
         r = extract_parser(texto)
-        print(f"\n{'='*60}")
-        print(f"EJEMPLO {i}: {nombre}")
-        print(f"  tipo         : {r['tipo']}")
-        print(f"  operacion    : {r['operacion']}")
-        print(f"  precio       : {r['precio']} {r['moneda']}")
-        print(f"  piso         : {r['piso']}")
-        print(f"  habitaciones : {r['habitaciones']}  banos: {r['banos']}")
-        print(f"  agua         : incluida={r['agua_incluida']}  monto={r['agua_monto']}  24h={r['agua_24h']}")
-        print(f"  luz          : {r['luz']}")
-        print(f"  cochera      : {r['cochera']} ({r['tipo_cochera']})")
-        print(f"  internet     : {r['internet_incluido']}")
-        print(f"  mascotas     : {r['mascotas']}")
-        print(f"  condicion    : adelanto={r['condiciones']['mes_adelantado']}  "
-              f"garantia={r['condiciones']['mes_garantia']}  "
-              f"contrato={r['condiciones']['contrato_minimo']}")
-        print(f"  dimensiones  : area={r['area']}  frente={r['frente']}  "
-              f"fondo={r['fondo']}  izq={r['izquierda']}  der={r['derecha']}")
-        print(f"  documentacion: {r['documentacion']}")
-        print(f"  uso_ideal    : {r['uso_ideal']}")
-        print(f"  faltantes    : {r['faltantes']}")
-        print(f"  advertencias : {r['advertencias']}")
+        _print_result(nombre, r)

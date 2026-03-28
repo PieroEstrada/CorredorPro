@@ -20,8 +20,9 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS usuarios (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     codigo        VARCHAR(20)  NOT NULL UNIQUE,
+    username      VARCHAR(80)  NULL     UNIQUE,
     nombre        VARCHAR(150) NOT NULL,
-    correo        VARCHAR(190) NOT NULL UNIQUE,
+    correo        VARCHAR(190) NULL     UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     rol           ENUM('admin','corredor') NOT NULL DEFAULT 'corredor',
     activo        TINYINT(1)   NOT NULL DEFAULT 1,

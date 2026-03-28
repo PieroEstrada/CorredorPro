@@ -341,6 +341,51 @@ label {
   gap: 14px;
 }
 .grid-form .full { grid-column: 1 / -1; }
+/* ── Barra de filtros ────────────────────────────────────────────────── */
+.filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.filters-bar select,
+.filters-bar input[type="number"] {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  min-width: 140px;
+}
+.filters-bar input[type="number"] { max-width: 160px; }
+.filters-bar button {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ── Cochera group (formulario propiedad) ───────────────────────────── */
+.cochera-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.cochera-toggle { font-weight: 500; }
+#tipo-cochera-wrap label { margin: 0; }
+
 .checkbox-row {
   display: flex;
   flex-wrap: wrap;
@@ -568,3 +613,76 @@ label {
   .actions button { width: 100%; }
   #mapa-container { height: 260px; }
 }
+
+/* ── Citas dashboard ────────────────────────────────────────────────── */
+.cita-dash-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.cita-dash-item:last-child { border-bottom: none; }
+.cita-dash-hora {
+  min-width: 50px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  line-height: 1.3;
+  text-align: center;
+}
+.cita-dash-item > div:nth-child(2) { flex: 1; font-size: 14px; line-height: 1.4; }
+
+/* ── Requerimientos modal ───────────────────────────────────────────── */
+.req-item + .req-item { margin-top: 8px; }
+
+/* ── Parse cita modal ───────────────────────────────────────────────── */
+.parse-section { border-top: 1px solid var(--border); padding-top: 12px; }
+.parse-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.parse-extracted { font-size: 13px; }
+
+/* ── Barra de búsqueda libre ────────────────────────────────────────── */
+.search-bar {
+  position: relative;
+  margin-bottom: 8px;
+}
+.search-bar input[type="search"] {
+  width: 100%;
+  height: 38px;
+  padding: 0 36px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--card);
+  color: var(--text);
+  box-sizing: border-box;
+}
+.search-bar input[type="search"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+}
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.search-clear:hover { color: var(--text); }

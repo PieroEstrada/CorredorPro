@@ -30,8 +30,8 @@ $uploadsBase = rtrim(dirname($_SERVER['PHP_SELF']), '/\\') . '/../uploads';
                 <h1>CorredorPro</h1>
                 <p class="login-sub">CRM inmobiliario · Pucallpa</p>
                 <form id="login-form">
-                    <label>Correo
-                        <input type="email" name="correo" placeholder="admin@corredor.pro" required autocomplete="email">
+                    <label>Correo o usuario
+                        <input type="text" name="login" placeholder="correo@ejemplo.com o usuario" required autocomplete="username">
                     </label>
                     <label>Contraseña
                         <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password">

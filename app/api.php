@@ -22,14 +22,15 @@ try {
 
     if ($route === '/auth/login' && $method === 'POST') {
         $body     = cp_request_body();
-        $correo   = cp_nullable_string($body['correo'] ?? null);
+        // Acepta el campo 'login' (correo o usuario) o el antiguo 'correo' por compatibilidad
+        $login    = cp_nullable_string($body['login'] ?? $body['correo'] ?? null);
         $password = (string) ($body['password'] ?? '');
 
-        if (!$correo || $password === '') {
-            cp_json_error('Correo y contraseña son obligatorios.', 422);
+        if (!$login || $password === '') {
+            cp_json_error('Usuario/correo y contraseña son obligatorios.', 422);
         }
 
-        $user = cp_auth_attempt($correo, $password);
+        $user = cp_auth_attempt($login, $password);
         if (!$user) cp_json_error('Credenciales incorrectas.', 401);
 
         cp_run_pending_cleanups(cp_db());
@@ -83,8 +84,14 @@ try {
         $params  = [];
 
         if (!empty($_GET['tipo'])) {
-            $filters[] = 'p.tipo = ?';
-            $params[]  = $_GET['tipo'];
+            $tipo = $_GET['tipo'];
+            // "Local" captura tanto "Local" como "Local comercial" en BD
+            if (stripos($tipo, 'local') !== false) {
+                $filters[] = "p.tipo LIKE '%Local%'";
+            } else {
+                $filters[] = 'p.tipo = ?';
+                $params[]  = $tipo;
+            }
         }
         if (!empty($_GET['operacion'])) {
             $filters[] = 'p.operacion = ?';
@@ -93,6 +100,21 @@ try {
         if (!empty($_GET['estado'])) {
             $filters[] = 'p.estado = ?';
             $params[]  = $_GET['estado'];
+        }
+        if (!empty($_GET['piso'])) {
+            $filters[] = 'p.piso = ?';
+            $params[]  = (int) $_GET['piso'];
+        }
+        if (!empty($_GET['precio_max'])) {
+            $filters[] = 'p.precio <= ?';
+            $params[]  = (float) $_GET['precio_max'];
+        }
+        if (!empty($_GET['cochera'])) {
+            $coch = strtoupper($_GET['cochera']);
+            if (in_array($coch, ['NO_TIENE', 'MOTO', 'CARRO'], true)) {
+                $filters[] = 'p.cochera = ?';
+                $params[]  = $coch;
+            }
         }
         // Corredor solo ve sus propiedades
         if ($user['rol'] === 'corredor') {
@@ -142,9 +164,9 @@ try {
             sala, comedor, cocina, kitchenette, patio, jardin, balcon, terraza,
             lavanderia, tendedero, azotea, deposito, oficina,
             aire_acondicionado, ventilador_techo, amoblado, closets,
-            reservorio_agua, agua_24h, cochera, tipo_cochera, cantidad_vehiculos,
+            reservorio_agua, agua_24h, cochera,
             seguridad, rejas, porton, internet_incluido, mantenimiento_incluido,
-            agua_incluida, agua_monto, luz, luz_monto,
+            agua_incluida, agua_monto, agua_a_consumo, servicios_incluidos, luz, luz_monto,
             mascotas, extranjeros, nacionalidades_aceptadas, ninos_permitidos,
             ubicacion, referencias, distrito, ciudad,
             mes_adelantado, mes_garantia, contrato_minimo,
@@ -158,9 +180,9 @@ try {
             :sala, :comedor, :cocina, :kitchenette, :patio, :jardin, :balcon, :terraza,
             :lavanderia, :tendedero, :azotea, :deposito, :oficina,
             :aire_acondicionado, :ventilador_techo, :amoblado, :closets,
-            :reservorio_agua, :agua_24h, :cochera, :tipo_cochera, :cantidad_vehiculos,
+            :reservorio_agua, :agua_24h, :cochera,
             :seguridad, :rejas, :porton, :internet_incluido, :mantenimiento_incluido,
-            :agua_incluida, :agua_monto, :luz, :luz_monto,
+            :agua_incluida, :agua_monto, :agua_a_consumo, :servicios_incluidos, :luz, :luz_monto,
             :mascotas, :extranjeros, :nacionalidades_aceptadas, :ninos_permitidos,
             :ubicacion, :referencias, :distrito, :ciudad,
             :mes_adelantado, :mes_garantia, :contrato_minimo,
@@ -207,9 +229,7 @@ try {
             'closets'                 => cp_bool_to_int($body['closets'] ?? null),
             'reservorio_agua'         => cp_bool_to_int($body['reservorio_agua'] ?? null),
             'agua_24h'                => cp_bool_to_int($body['agua_24h'] ?? null),
-            'cochera'                 => cp_bool_to_int($body['cochera'] ?? null),
-            'tipo_cochera'            => cp_nullable_string($body['tipo_cochera'] ?? null),
-            'cantidad_vehiculos'      => cp_nullable_int($body['cantidad_vehiculos'] ?? null),
+            'cochera'                 => in_array($body['cochera'] ?? '', ['NO_TIENE','MOTO','CARRO'], true) ? $body['cochera'] : 'NO_TIENE',
             'seguridad'               => cp_bool_to_int($body['seguridad'] ?? null),
             'rejas'                   => cp_bool_to_int($body['rejas'] ?? null),
             'porton'                  => cp_bool_to_int($body['porton'] ?? null),
@@ -217,6 +237,8 @@ try {
             'mantenimiento_incluido'  => cp_bool_to_int($body['mantenimiento_incluido'] ?? null),
             'agua_incluida'           => cp_bool_to_int($body['agua_incluida'] ?? null),
             'agua_monto'              => cp_nullable_float($body['agua_monto'] ?? null),
+            'agua_a_consumo'          => cp_bool_to_int($body['agua_a_consumo'] ?? null),
+            'servicios_incluidos'     => cp_db_json_encode($body['servicios_incluidos'] ?? null),
             'luz'                     => cp_nullable_string($body['luz'] ?? null),
             'luz_monto'               => cp_nullable_float($body['luz_monto'] ?? null),
             'mascotas'                => cp_nullable_string($body['mascotas'] ?? 'No especificado') ?? 'No especificado',
@@ -292,10 +314,13 @@ try {
 
         $allowed = [
             'titulo', 'tipo', 'operacion', 'precio', 'moneda', 'piso', 'area', 'area_construida',
-            'habitaciones', 'banos', 'medios_banos', 'tipo_cochera', 'cantidad_vehiculos', 'mascotas',
-            'luz', 'luz_monto', 'agua_monto', 'ubicacion', 'distrito', 'ciudad',
+            'habitaciones', 'banos', 'medios_banos', 'mascotas',
+            'luz', 'luz_monto', 'agua_monto', 'agua_a_consumo', 'agua_incluida',
+            'internet_incluido', 'mantenimiento_incluido', 'cochera', 'porton', 'amoblado',
+            'lavanderia', 'terraza', 'patio', 'seguridad', 'rejas', 'aire_acondicionado',
+            'ubicacion', 'distrito', 'ciudad',
             'mes_adelantado', 'mes_garantia', 'contrato_minimo', 'descripcion_original',
-            'ninos_permitidos', 'extranjeros',
+            'ninos_permitidos', 'extranjeros', 'servicios_incluidos',
         ];
 
         $sets   = [];
@@ -607,7 +632,7 @@ try {
         cp_require_admin();
         $db   = cp_db();
         $stmt = $db->query(
-            'SELECT id, codigo, nombre, correo, rol, activo, created_at, updated_at
+            'SELECT id, codigo, username, nombre, correo, rol, activo, created_at, updated_at
              FROM usuarios ORDER BY id ASC'
         );
         cp_json(['ok' => true, 'items' => $stmt->fetchAll()]);
@@ -620,26 +645,36 @@ try {
 
         $nombre   = cp_nullable_string($body['nombre'] ?? null);
         $correo   = cp_nullable_string($body['correo'] ?? null);
+        $username = cp_nullable_string($body['username'] ?? null);
         $password = (string) ($body['password'] ?? '');
         $rol      = cp_nullable_string($body['rol'] ?? 'corredor') ?? 'corredor';
 
         if (!$nombre) cp_json_error('El nombre es obligatorio.', 422);
-        if (!$correo) cp_json_error('El correo es obligatorio.', 422);
-        if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) cp_json_error('Correo inválido.', 422);
+        if (!$correo && !$username) cp_json_error('Debes ingresar al menos un correo o un nombre de usuario.', 422);
+        if ($correo && !filter_var($correo, FILTER_VALIDATE_EMAIL)) cp_json_error('El correo no tiene un formato válido.', 422);
         if (strlen($password) < 6) cp_json_error('La contraseña debe tener al menos 6 caracteres.', 422);
         if (!in_array($rol, ['admin', 'corredor'], true)) cp_json_error('Rol inválido.', 422);
 
-        // Verificar que el correo no exista
-        $exists = $db->prepare('SELECT id FROM usuarios WHERE correo = ? LIMIT 1');
-        $exists->execute([$correo]);
-        if ($exists->fetch()) cp_json_error('El correo ya está registrado.', 409);
+        // Verificar unicidad de correo (solo si se proporcionó)
+        if ($correo) {
+            $exists = $db->prepare('SELECT id FROM usuarios WHERE correo = ? LIMIT 1');
+            $exists->execute([$correo]);
+            if ($exists->fetch()) cp_json_error('El correo ya está registrado.', 409);
+        }
+
+        // Verificar unicidad de username (solo si se proporcionó)
+        if ($username) {
+            $checkUser = $db->prepare('SELECT id FROM usuarios WHERE username = ? LIMIT 1');
+            $checkUser->execute([$username]);
+            if ($checkUser->fetch()) cp_json_error('El nombre de usuario ya está en uso.', 409);
+        }
 
         $codigo = cp_generate_code($db, 'usuarios', 'USR');
         $stmt = $db->prepare(
-            'INSERT INTO usuarios (codigo, nombre, correo, password_hash, rol, activo)
-             VALUES (?, ?, ?, ?, ?, 1)'
+            'INSERT INTO usuarios (codigo, username, nombre, correo, password_hash, rol, activo)
+             VALUES (?, ?, ?, ?, ?, ?, 1)'
         );
-        $stmt->execute([$codigo, $nombre, $correo, password_hash($password, PASSWORD_DEFAULT), $rol]);
+        $stmt->execute([$codigo, $username, $nombre, $correo, password_hash($password, PASSWORD_DEFAULT), $rol]);
         cp_json(['ok' => true, 'id' => (int) $db->lastInsertId(), 'codigo' => $codigo]);
     }
 
@@ -647,7 +682,7 @@ try {
         cp_require_admin();
         $db   = cp_db();
         $stmt = $db->prepare(
-            'SELECT id, codigo, nombre, correo, rol, activo, created_at, updated_at
+            'SELECT id, codigo, username, nombre, correo, rol, activo, created_at, updated_at
              FROM usuarios WHERE id = ? LIMIT 1'
         );
         $stmt->execute([(int) $m[1]]);
@@ -665,7 +700,7 @@ try {
         $sets   = [];
         $values = [];
 
-        foreach (['nombre', 'correo', 'rol'] as $f) {
+        foreach (['nombre', 'correo', 'rol', 'username'] as $f) {
             if (!array_key_exists($f, $body)) continue;
             if ($f === 'correo' && !filter_var($body[$f], FILTER_VALIDATE_EMAIL)) {
                 cp_json_error('Correo inválido.', 422);
@@ -741,20 +776,53 @@ try {
         $user = cp_require_auth();
         $db   = cp_db();
 
-        $filters = [];
-        $params  = [];
+        // Todos los roles ven SOLO sus propios prospectos (privacidad de clientes)
+        $filters = ['p.usuario_id = ?'];
+        $params  = [(int) $user['id']];
 
-        if ($user['rol'] === 'corredor') {
-            $filters[] = 'usuario_id = ?';
-            $params[]  = (int) $user['id'];
+        // Filtros que requieren consulta a requerimientos_prospecto
+        $reqConds  = [];
+        $reqParams = [];
+
+        if (!empty($_GET['tipo_inmueble'])) {
+            $tipo = $_GET['tipo_inmueble'];
+            // Busca en requerimiento_tipos_inmueble via sub-EXISTS
+            if (stripos($tipo, 'local') !== false) {
+                $reqConds[] = "EXISTS (SELECT 1 FROM requerimiento_tipos_inmueble rti WHERE rti.requerimiento_id = r.id AND rti.tipo_inmueble LIKE '%Local%')";
+            } else {
+                $reqConds[]  = "EXISTS (SELECT 1 FROM requerimiento_tipos_inmueble rti WHERE rti.requerimiento_id = r.id AND rti.tipo_inmueble = ?)";
+                $reqParams[] = $tipo;
+            }
         }
-        if (!empty($_GET['estado'])) {
-            $filters[] = 'estado = ?';
-            $params[]  = $_GET['estado'];
+        if (!empty($_GET['cochera'])) {
+            $coch = strtoupper($_GET['cochera']);
+            if (in_array($coch, ['NO_TIENE', 'MOTO', 'CARRO'], true)) {
+                $reqConds[]  = 'r.cochera = ?';
+                $reqParams[] = $coch;
+            }
+        }
+        if (!empty($_GET['mascota'])) {
+            $reqConds[]  = 'r.requiere_propiedad_con_mascota = ?';
+            $reqParams[] = (int) $_GET['mascota'];
+        }
+        if (!empty($_GET['primer_piso'])) {
+            $reqConds[]  = 'r.primer_piso = 1';
+        }
+        if (!empty($_GET['presupuesto_max'])) {
+            $reqConds[]  = 'r.presupuesto_max <= ?';
+            $reqParams[] = (float) $_GET['presupuesto_max'];
         }
 
-        $where = $filters ? 'WHERE ' . implode(' AND ', $filters) : '';
-        $stmt  = $db->prepare("SELECT * FROM prospectos {$where} ORDER BY id DESC");
+        if ($reqConds) {
+            $reqWhere  = implode(' AND ', $reqConds);
+            $filters[] = "EXISTS (SELECT 1 FROM requerimientos_prospecto r WHERE r.prospecto_id = p.id AND {$reqWhere})";
+            foreach ($reqParams as $rp) {
+                $params[] = $rp;
+            }
+        }
+
+        $where = 'WHERE ' . implode(' AND ', $filters);
+        $stmt  = $db->prepare("SELECT p.* FROM prospectos p {$where} ORDER BY p.id DESC");
         $stmt->execute($params);
         cp_json(['ok' => true, 'items' => $stmt->fetchAll()]);
     }
@@ -766,25 +834,22 @@ try {
 
         if (!cp_nullable_string($body['nombre'] ?? null)) cp_json_error('El nombre es obligatorio.', 422);
 
-        $codigo = cp_generate_code($db, 'prospectos', 'CLI');
+        $celular  = cp_nullable_string($body['celular'] ?? null);
+        $whatsapp = cp_nullable_string($body['whatsapp'] ?? null) ?? $celular;
         $stmt = $db->prepare(
-            'INSERT INTO prospectos (codigo, usuario_id, nombre, telefono, whatsapp, correo, documento, nacionalidad, estado, fuente, observaciones)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO prospectos (usuario_id, dni, nombre, celular, whatsapp, nacionalidad, observaciones)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
-            $codigo,
             (int) $user['id'],
+            cp_nullable_string($body['dni'] ?? null),
             cp_nullable_string($body['nombre'] ?? null),
-            cp_nullable_string($body['telefono'] ?? null),
-            cp_nullable_string($body['whatsapp'] ?? null),
-            cp_nullable_string($body['correo'] ?? null),
-            cp_nullable_string($body['documento'] ?? null),
+            $celular,
+            $whatsapp,
             cp_nullable_string($body['nacionalidad'] ?? null),
-            cp_nullable_string($body['estado'] ?? 'Nuevo') ?? 'Nuevo',
-            cp_nullable_string($body['fuente'] ?? null),
             cp_nullable_string($body['observaciones'] ?? null),
         ]);
-        cp_json(['ok' => true, 'id' => (int) $db->lastInsertId(), 'codigo' => $codigo]);
+        cp_json(['ok' => true, 'id' => (int) $db->lastInsertId()]);
     }
 
     if (preg_match('#^/prospectos/(\d+)$#', $route, $m) && $method === 'GET') {
@@ -797,7 +862,8 @@ try {
         $row = $stmt->fetch();
         if (!$row) cp_json_error('Prospecto no encontrado.', 404);
 
-        if ($user['rol'] === 'corredor' && (int) $row['usuario_id'] !== (int) $user['id']) {
+        // Todos los roles solo acceden a sus propios prospectos
+        if ((int) $row['usuario_id'] !== (int) $user['id']) {
             cp_json_error('Sin permiso.', 403);
         }
 
@@ -810,7 +876,7 @@ try {
         $body = cp_request_body();
         $id   = (int) $m[1];
 
-        $allowed = ['nombre', 'telefono', 'whatsapp', 'correo', 'documento', 'nacionalidad', 'estado', 'fuente', 'observaciones'];
+        $allowed = ['nombre', 'dni', 'celular', 'whatsapp', 'nacionalidad', 'observaciones'];
         $sets    = [];
         $values  = [];
 
@@ -870,39 +936,141 @@ try {
 
     if (preg_match('#^/prospectos/(\d+)/requerimientos$#', $route, $m) && $method === 'GET') {
         cp_require_auth();
-        $db   = cp_db();
+        $db         = cp_db();
+        $prospId    = (int) $m[1];
+
         $stmt = $db->prepare('SELECT * FROM requerimientos_prospecto WHERE prospecto_id = ? ORDER BY id DESC');
-        $stmt->execute([(int) $m[1]]);
-        cp_json(['ok' => true, 'items' => $stmt->fetchAll()]);
+        $stmt->execute([$prospId]);
+        $items = $stmt->fetchAll();
+
+        if ($items) {
+            $reqIds       = array_column($items, 'id');
+            $placeholders = implode(',', array_fill(0, count($reqIds), '?'));
+            $tiposStmt    = $db->prepare(
+                "SELECT requerimiento_id, tipo_inmueble FROM requerimiento_tipos_inmueble WHERE requerimiento_id IN ({$placeholders})"
+            );
+            $tiposStmt->execute($reqIds);
+            $tiposByReq = [];
+            foreach ($tiposStmt->fetchAll() as $tr) {
+                $tiposByReq[(int) $tr['requerimiento_id']][] = $tr['tipo_inmueble'];
+            }
+            foreach ($items as &$item) {
+                $item['tipos_inmueble'] = $tiposByReq[(int) $item['id']] ?? [];
+            }
+            unset($item);
+        }
+
+        cp_json(['ok' => true, 'items' => $items]);
     }
 
     if (preg_match('#^/prospectos/(\d+)/requerimientos$#', $route, $m) && $method === 'POST') {
-        cp_require_auth();
-        $db   = cp_db();
-        $body = cp_request_body();
+        $user    = cp_require_auth();
+        $db      = cp_db();
+        $body    = cp_request_body();
+        $prospId = (int) $m[1];
+
+        // Verificar que el prospecto pertenece al usuario
+        $own = $db->prepare('SELECT id FROM prospectos WHERE id = ? AND usuario_id = ? LIMIT 1');
+        $own->execute([$prospId, (int) $user['id']]);
+        if (!$own->fetch()) cp_json_error('Prospecto no encontrado.', 404);
+
+        $cochera = $body['cochera'] ?? 'NO_TIENE';
+        if (!in_array($cochera, ['NO_TIENE', 'MOTO', 'CARRO'], true)) $cochera = 'NO_TIENE';
 
         $stmt = $db->prepare(
             'INSERT INTO requerimientos_prospecto
-            (prospecto_id, operacion, tipo_inmueble, presupuesto_min, presupuesto_max, moneda, zonas, habitaciones_min, banos_min, cochera, tipo_vehiculo, mascotas, extranjero, estado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+             (prospecto_id, presupuesto_max, cochera, requiere_propiedad_con_mascota, primer_piso, observaciones)
+             VALUES (?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
-            (int) $m[1],
-            cp_nullable_string($body['operacion'] ?? null),
-            cp_nullable_string($body['tipo_inmueble'] ?? null),
-            cp_nullable_float($body['presupuesto_min'] ?? null),
+            $prospId,
             cp_nullable_float($body['presupuesto_max'] ?? null),
-            cp_nullable_string($body['moneda'] ?? 'S/') ?? 'S/',
-            cp_nullable_string($body['zonas'] ?? null),
-            cp_nullable_int($body['habitaciones_min'] ?? null),
-            cp_nullable_int($body['banos_min'] ?? null),
-            cp_nullable_string($body['cochera'] ?? null),
-            cp_nullable_string($body['tipo_vehiculo'] ?? null),
-            cp_nullable_string($body['mascotas'] ?? null),
-            cp_nullable_string($body['extranjero'] ?? null),
-            cp_nullable_string($body['estado'] ?? 'Activo') ?? 'Activo',
+            $cochera,
+            cp_bool_to_int($body['requiere_propiedad_con_mascota'] ?? false) ?? 0,
+            cp_bool_to_int($body['primer_piso'] ?? false) ?? 0,
+            cp_nullable_string($body['observaciones'] ?? null),
         ]);
-        cp_json(['ok' => true, 'id' => (int) $db->lastInsertId()]);
+        $reqId = (int) $db->lastInsertId();
+
+        // Insertar tipos de inmueble
+        $tipos = $body['tipos_inmueble'] ?? [];
+        if (is_array($tipos) && !empty($tipos)) {
+            $insT = $db->prepare('INSERT INTO requerimiento_tipos_inmueble (requerimiento_id, tipo_inmueble) VALUES (?, ?)');
+            foreach ($tipos as $tipo) {
+                $t = cp_nullable_string($tipo);
+                if ($t) $insT->execute([$reqId, $t]);
+            }
+        }
+
+        cp_json(['ok' => true, 'id' => $reqId]);
+    }
+
+    if (preg_match('#^/prospectos/(\d+)/requerimientos/(\d+)$#', $route, $m) && $method === 'PUT') {
+        $user    = cp_require_auth();
+        $db      = cp_db();
+        $body    = cp_request_body();
+        $prospId = (int) $m[1];
+        $reqId   = (int) $m[2];
+
+        // Verificar que pertenece al usuario
+        $own = $db->prepare(
+            'SELECT r.id FROM requerimientos_prospecto r
+             JOIN prospectos p ON p.id = r.prospecto_id
+             WHERE r.id = ? AND p.usuario_id = ? LIMIT 1'
+        );
+        $own->execute([$reqId, (int) $user['id']]);
+        if (!$own->fetch()) cp_json_error('Requerimiento no encontrado.', 404);
+
+        $cochera = $body['cochera'] ?? null;
+        if ($cochera !== null && !in_array($cochera, ['NO_TIENE', 'MOTO', 'CARRO'], true)) $cochera = 'NO_TIENE';
+
+        $sets   = [];
+        $values = [];
+
+        if ($cochera !== null)                              { $sets[] = 'cochera = ?';                         $values[] = $cochera; }
+        if (array_key_exists('presupuesto_max', $body))    { $sets[] = 'presupuesto_max = ?';                 $values[] = cp_nullable_float($body['presupuesto_max']); }
+        if (array_key_exists('requiere_propiedad_con_mascota', $body)) { $sets[] = 'requiere_propiedad_con_mascota = ?'; $values[] = cp_bool_to_int($body['requiere_propiedad_con_mascota']) ?? 0; }
+        if (array_key_exists('primer_piso', $body))        { $sets[] = 'primer_piso = ?';                    $values[] = cp_bool_to_int($body['primer_piso']) ?? 0; }
+        if (array_key_exists('observaciones', $body))      { $sets[] = 'observaciones = ?';                  $values[] = cp_nullable_string($body['observaciones']); }
+
+        if ($sets) {
+            $values[] = $reqId;
+            $db->prepare('UPDATE requerimientos_prospecto SET ' . implode(', ', $sets) . ', updated_at = NOW() WHERE id = ?')
+               ->execute($values);
+        }
+
+        // Reemplazar tipos si se envían
+        if (array_key_exists('tipos_inmueble', $body)) {
+            $db->prepare('DELETE FROM requerimiento_tipos_inmueble WHERE requerimiento_id = ?')->execute([$reqId]);
+            $tipos = $body['tipos_inmueble'] ?? [];
+            if (is_array($tipos) && !empty($tipos)) {
+                $insT = $db->prepare('INSERT INTO requerimiento_tipos_inmueble (requerimiento_id, tipo_inmueble) VALUES (?, ?)');
+                foreach ($tipos as $tipo) {
+                    $t = cp_nullable_string($tipo);
+                    if ($t) $insT->execute([$reqId, $t]);
+                }
+            }
+        }
+
+        cp_json(['ok' => true]);
+    }
+
+    if (preg_match('#^/prospectos/(\d+)/requerimientos/(\d+)$#', $route, $m) && $method === 'DELETE') {
+        $user  = cp_require_auth();
+        $db    = cp_db();
+        $reqId = (int) $m[2];
+
+        $own = $db->prepare(
+            'SELECT r.id FROM requerimientos_prospecto r
+             JOIN prospectos p ON p.id = r.prospecto_id
+             WHERE r.id = ? AND p.usuario_id = ? LIMIT 1'
+        );
+        $own->execute([$reqId, (int) $user['id']]);
+        if (!$own->fetch()) cp_json_error('Requerimiento no encontrado.', 404);
+
+        // CASCADE eliminará requerimiento_tipos_inmueble automáticamente
+        $db->prepare('DELETE FROM requerimientos_prospecto WHERE id = ?')->execute([$reqId]);
+        cp_json(['ok' => true]);
     }
 
     // =========================================================================
@@ -948,15 +1116,39 @@ try {
     // =========================================================================
 
     if ($route === '/citas' && $method === 'GET') {
-        cp_require_auth();
+        $user = cp_require_auth();
         $db   = cp_db();
-        $stmt = $db->query(
-            'SELECT c.*, p.nombre AS prospecto_nombre, pr.titulo AS propiedad_titulo
+
+        $filters = ['c.usuario_id = ?'];
+        $params  = [(int) $user['id']];
+
+        if (!empty($_GET['prospecto_id'])) {
+            $filters[] = 'c.prospecto_id = ?';
+            $params[]  = (int) $_GET['prospecto_id'];
+        }
+        if (!empty($_GET['estado'])) {
+            $filters[] = 'c.estado = ?';
+            $params[]  = $_GET['estado'];
+        }
+        if (!empty($_GET['fecha_desde'])) {
+            $filters[] = 'c.fecha >= ?';
+            $params[]  = $_GET['fecha_desde'];
+        }
+        if (!empty($_GET['fecha_hasta'])) {
+            $filters[] = 'c.fecha <= ?';
+            $params[]  = $_GET['fecha_hasta'];
+        }
+
+        $where = 'WHERE ' . implode(' AND ', $filters);
+        $stmt  = $db->prepare(
+            "SELECT c.*, p.nombre AS prospecto_nombre, p.celular AS prospecto_celular, p.whatsapp AS prospecto_whatsapp, pr.titulo AS propiedad_titulo
              FROM citas c
              LEFT JOIN prospectos p ON p.id = c.prospecto_id
              LEFT JOIN propiedades pr ON pr.id = c.propiedad_id
-             ORDER BY c.fecha ASC, c.hora ASC'
+             {$where}
+             ORDER BY c.fecha ASC, c.hora ASC"
         );
+        $stmt->execute($params);
         cp_json(['ok' => true, 'items' => $stmt->fetchAll()]);
     }
 
@@ -986,10 +1178,16 @@ try {
     }
 
     if (preg_match('#^/citas/(\d+)$#', $route, $m) && $method === 'PUT') {
-        cp_require_auth();
+        $user = cp_require_auth();
         $db   = cp_db();
         $body = cp_request_body();
         $id   = (int) $m[1];
+
+        $cita = $db->prepare('SELECT id, usuario_id FROM citas WHERE id = ? LIMIT 1');
+        $cita->execute([$id]);
+        $cita = $cita->fetch();
+        if (!$cita) cp_json_error('Cita no encontrada.', 404);
+        if ((int) $cita['usuario_id'] !== (int) $user['id']) cp_json_error('Sin permiso.', 403);
 
         $allowed = ['titulo', 'tipo', 'fecha', 'hora', 'duracion_min', 'ubicacion', 'notas', 'estado'];
         $sets    = [];
@@ -1006,6 +1204,158 @@ try {
         $db->prepare('UPDATE citas SET ' . implode(', ', $sets) . ', updated_at = NOW() WHERE id = ?')
            ->execute($values);
         cp_json(['ok' => true]);
+    }
+
+    if (preg_match('#^/citas/(\d+)$#', $route, $m) && $method === 'DELETE') {
+        $user = cp_require_auth();
+        $db   = cp_db();
+        $id   = (int) $m[1];
+
+        $cita = $db->prepare('SELECT id, usuario_id FROM citas WHERE id = ? LIMIT 1');
+        $cita->execute([$id]);
+        $cita = $cita->fetch();
+        if (!$cita) cp_json_error('Cita no encontrada.', 404);
+        if ((int) $cita['usuario_id'] !== (int) $user['id']) cp_json_error('Sin permiso.', 403);
+
+        $db->prepare('DELETE FROM citas WHERE id = ?')->execute([$id]);
+        cp_json(['ok' => true]);
+    }
+
+    // =========================================================================
+    // CITAS: PARSER DE PLANTILLA
+    // Extrae datos de texto tipo plantilla y busca prospecto + propiedad
+    // =========================================================================
+
+    if ($route === '/citas/parse' && $method === 'POST') {
+        $user = cp_require_auth();
+        $db   = cp_db();
+        $body = cp_request_body();
+        $text = cp_nullable_string($body['text'] ?? null);
+        if (!$text) cp_json_error('Debes enviar el texto de la cita.', 422);
+
+        $parsed = cp_parse_cita_text($text);
+
+        // Buscar prospecto por celular, luego por nombre
+        $prospectos = [];
+        if ($parsed['celular']) {
+            $cel = preg_replace('/\D/', '', $parsed['celular']); // solo dígitos
+            $stmt = $db->prepare(
+                "SELECT id, nombre, celular, whatsapp FROM prospectos
+                 WHERE usuario_id = ? AND (
+                     REPLACE(REPLACE(REPLACE(celular,' ',''),'-',''),'(','') LIKE ?
+                     OR REPLACE(REPLACE(REPLACE(whatsapp,' ',''),'-',''),'(','') LIKE ?
+                 ) LIMIT 5"
+            );
+            $stmt->execute([(int) $user['id'], "%{$cel}%", "%{$cel}%"]);
+            $prospectos = $stmt->fetchAll();
+        }
+        if (empty($prospectos) && $parsed['cliente']) {
+            $stmt = $db->prepare(
+                "SELECT id, nombre, celular, whatsapp FROM prospectos
+                 WHERE usuario_id = ? AND nombre LIKE ? LIMIT 5"
+            );
+            $stmt->execute([(int) $user['id'], '%' . $parsed['cliente'] . '%']);
+            $prospectos = $stmt->fetchAll();
+        }
+
+        // Buscar propiedad por texto libre (ubicación, referencias, título, descripción)
+        $propiedades = [];
+        $searchTerms = array_filter([
+            $parsed['lugar'] ?? null,
+        ]);
+        if (!empty($searchTerms)) {
+            $term = '%' . implode('%', $searchTerms) . '%';
+            $baseSql = $user['rol'] === 'corredor'
+                ? "AND p.usuario_id = {$user['id']}"
+                : '';
+            $stmt = $db->prepare(
+                "SELECT p.id, p.codigo, p.titulo, p.precio, p.moneda, p.ubicacion, p.distrito, p.referencias, p.piso
+                 FROM propiedades p
+                 WHERE p.estado = 'Disponible' {$baseSql}
+                   AND (p.titulo LIKE ? OR p.ubicacion LIKE ? OR p.referencias LIKE ? OR p.descripcion_original LIKE ?)
+                 ORDER BY p.id DESC LIMIT 5"
+            );
+            $stmt->execute([$term, $term, $term, $term]);
+            $propiedades = $stmt->fetchAll();
+            foreach ($propiedades as &$prop) {
+                $prop['referencias'] = cp_db_json_decode($prop['referencias'] ?? null, []);
+            }
+            unset($prop);
+        }
+
+        cp_json([
+            'ok'          => true,
+            'parsed'      => $parsed,
+            'prospectos'  => $prospectos,
+            'propiedades' => $propiedades,
+        ]);
+    }
+
+    // =========================================================================
+    // DASHBOARD
+    // =========================================================================
+
+    if ($route === '/dashboard' && $method === 'GET') {
+        $user = cp_require_auth();
+        $db   = cp_db();
+        $uid  = (int) $user['id'];
+
+        // Fecha de hoy en zona horaria de Perú (UTC-5)
+        $now      = new \DateTimeImmutable('now', new \DateTimeZone('America/Lima'));
+        $hoy      = $now->format('Y-m-d');
+        $manana   = $now->modify('+1 day')->format('Y-m-d');
+        $en7dias  = $now->modify('+7 days')->format('Y-m-d');
+
+        // Citas de hoy
+        $stmtHoy = $db->prepare(
+            "SELECT c.*, p.nombre AS prospecto_nombre, p.celular AS prospecto_celular, p.whatsapp AS prospecto_whatsapp, pr.titulo AS propiedad_titulo
+             FROM citas c
+             LEFT JOIN prospectos p ON p.id = c.prospecto_id
+             LEFT JOIN propiedades pr ON pr.id = c.propiedad_id
+             WHERE c.usuario_id = ? AND c.fecha = ? AND c.estado != 'Cancelada'
+             ORDER BY c.hora ASC"
+        );
+        $stmtHoy->execute([$uid, $hoy]);
+        $citasHoy = $stmtHoy->fetchAll();
+
+        // Próximas citas (mañana + 7 días, pendientes)
+        $stmtProx = $db->prepare(
+            "SELECT c.*, p.nombre AS prospecto_nombre, p.celular AS prospecto_celular, p.whatsapp AS prospecto_whatsapp, pr.titulo AS propiedad_titulo
+             FROM citas c
+             LEFT JOIN prospectos p ON p.id = c.prospecto_id
+             LEFT JOIN propiedades pr ON pr.id = c.propiedad_id
+             WHERE c.usuario_id = ? AND c.fecha > ? AND c.fecha <= ? AND c.estado = 'Pendiente'
+             ORDER BY c.fecha ASC, c.hora ASC
+             LIMIT 10"
+        );
+        $stmtProx->execute([$uid, $hoy, $en7dias]);
+        $citasProximas = $stmtProx->fetchAll();
+
+        // Conteos generales
+        $totalProps = $db->prepare("SELECT COUNT(*) FROM propiedades WHERE usuario_id = ? AND estado = 'Disponible'");
+        $totalProps->execute([$uid]);
+
+        $totalProsp = $db->prepare("SELECT COUNT(*) FROM prospectos WHERE usuario_id = ?");
+        $totalProsp->execute([$uid]);
+
+        $totalMatches = $db->prepare(
+            "SELECT COUNT(*) FROM matches m
+             INNER JOIN propiedades p ON p.id = m.propiedad_id
+             WHERE p.usuario_id = ? AND m.visto = 0"
+        );
+        $totalMatches->execute([$uid]);
+
+        cp_json([
+            'ok'              => true,
+            'hoy'             => $hoy,
+            'citas_hoy'       => $citasHoy,
+            'citas_proximas'  => $citasProximas,
+            'resumen'         => [
+                'propiedades_disponibles' => (int) $totalProps->fetchColumn(),
+                'prospectos'              => (int) $totalProsp->fetchColumn(),
+                'matches_nuevos'          => (int) $totalMatches->fetchColumn(),
+            ],
+        ]);
     }
 
     // =========================================================================
@@ -1042,9 +1392,233 @@ try {
     // =========================================================================
 
     if ($route === '/matches' && $method === 'GET') {
-        cp_require_auth();
-        $min = isset($_GET['min']) ? max(0, (int) $_GET['min']) : 40;
-        cp_json(['ok' => true, 'items' => cp_match_list($min)]);
+        $user = cp_require_auth();
+        $min  = isset($_GET['min']) ? max(0, (int) $_GET['min']) : 30;
+        // Cada usuario ve solo los matches de sus propias propiedades
+        cp_json(['ok' => true, 'items' => cp_match_list($min, (int) $user['id'])]);
+    }
+
+    // GET /propiedades/{id}/matches — matches de una propiedad específica
+    if (preg_match('#^/propiedades/(\d+)/matches$#', $route, $m) && $method === 'GET') {
+        $user    = cp_require_auth();
+        $db      = cp_db();
+        $propId  = (int) $m[1];
+
+        $prop = $db->prepare('SELECT id, usuario_id FROM propiedades WHERE id = ? LIMIT 1');
+        $prop->execute([$propId]);
+        $prop = $prop->fetch();
+        if (!$prop) cp_json_error('Propiedad no encontrada.', 404);
+        if ($user['rol'] === 'corredor' && (int) $prop['usuario_id'] !== (int) $user['id']) {
+            cp_json_error('Sin permiso.', 403);
+        }
+
+        cp_json(['ok' => true, 'items' => cp_match_list_for_property($propId)]);
+    }
+
+    // =========================================================================
+    // COMISIONES
+    // =========================================================================
+
+    if ($route === '/comisiones' && $method === 'GET') {
+        $user = cp_require_auth();
+        $db   = cp_db();
+
+        $filters = [];
+        $params  = [];
+
+        // Corredor solo ve sus propias comisiones
+        if ($user['rol'] === 'corredor') {
+            $filters[] = '(c.usuario_id = ? OR c.cerrado_por_id = ?)';
+            $params[]  = (int) $user['id'];
+            $params[]  = (int) $user['id'];
+        }
+
+        // Filtros opcionales
+        if (!empty($_GET['tipo_operacion'])) {
+            $filters[] = 'c.tipo_operacion = ?';
+            $params[]  = $_GET['tipo_operacion'];
+        }
+        if (!empty($_GET['mes']) && !empty($_GET['anio'])) {
+            $filters[] = 'MONTH(c.fecha) = ? AND YEAR(c.fecha) = ?';
+            $params[]  = (int) $_GET['mes'];
+            $params[]  = (int) $_GET['anio'];
+        } elseif (!empty($_GET['anio'])) {
+            $filters[] = 'YEAR(c.fecha) = ?';
+            $params[]  = (int) $_GET['anio'];
+        }
+        if (!empty($_GET['corredor_id'])) {
+            $filters[] = 'c.cerrado_por_id = ?';
+            $params[]  = (int) $_GET['corredor_id'];
+        }
+
+        $where = $filters ? 'WHERE ' . implode(' AND ', $filters) : '';
+        $sql   = "SELECT c.*,
+                    pr.codigo AS propiedad_codigo, pr.titulo AS propiedad_titulo,
+                    u.nombre  AS registrado_por_nombre,
+                    cb.nombre AS cerrado_por_nombre
+                  FROM comisiones c
+                  INNER JOIN propiedades pr ON pr.id = c.propiedad_id
+                  INNER JOIN usuarios    u  ON u.id  = c.usuario_id
+                  LEFT  JOIN usuarios    cb ON cb.id = c.cerrado_por_id
+                  {$where}
+                  ORDER BY c.fecha DESC, c.id DESC";
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $items = $stmt->fetchAll();
+
+        // Resumen
+        $totalTotal     = array_sum(array_column($items, 'monto_total'));
+        $totalCorredor  = array_sum(array_column($items, 'monto_corredor'));
+        $totalAdmin     = array_sum(array_column($items, 'monto_admin'));
+
+        cp_json([
+            'ok'      => true,
+            'items'   => $items,
+            'resumen' => [
+                'total_comisiones' => count($items),
+                'monto_total'      => $totalTotal,
+                'monto_corredor'   => $totalCorredor,
+                'monto_admin'      => $totalAdmin,
+            ],
+        ]);
+    }
+
+    if ($route === '/comisiones' && $method === 'POST') {
+        $user = cp_require_auth();
+        $body = cp_request_body();
+        $db   = cp_db();
+
+        $propId  = cp_nullable_int($body['propiedad_id'] ?? null);
+        $fecha   = cp_nullable_string($body['fecha'] ?? cp_today());
+        $monto   = cp_nullable_float($body['monto_total'] ?? null);
+        $tipo    = cp_nullable_string($body['tipo_operacion'] ?? 'Alquiler') ?? 'Alquiler';
+
+        if (!$propId) cp_json_error('propiedad_id es obligatorio.', 422);
+        if ($monto === null || $monto <= 0) cp_json_error('monto_total debe ser mayor a 0.', 422);
+        if (!in_array($tipo, ['Venta', 'Alquiler'], true)) {
+            cp_json_error('tipo_operacion debe ser Venta o Alquiler.', 422);
+        }
+
+        // Verificar permiso sobre la propiedad
+        $propRow = $db->prepare('SELECT usuario_id FROM propiedades WHERE id = ? LIMIT 1');
+        $propRow->execute([$propId]);
+        $propRow = $propRow->fetch();
+        if (!$propRow) cp_json_error('Propiedad no encontrada.', 404);
+        if ($user['rol'] === 'corredor' && (int) $propRow['usuario_id'] !== (int) $user['id']) {
+            cp_json_error('Sin permiso sobre esta propiedad.', 403);
+        }
+
+        $cerradoPorId = cp_nullable_int($body['cerrado_por_id'] ?? null);
+        // Si es corredor, la operación la cerró él mismo
+        if ($user['rol'] === 'corredor') {
+            $cerradoPorId = (int) $user['id'];
+        }
+
+        $montoCorredor = cp_nullable_float($body['monto_corredor'] ?? null);
+        $montoAdmin    = cp_nullable_float($body['monto_admin'] ?? null);
+
+        // Si no se especifica desglose, inferir automáticamente cuando es corredor
+        if ($montoCorredor === null && $montoAdmin === null) {
+            if ($cerradoPorId !== null && $cerradoPorId !== (int) $user['id']) {
+                // Admin registra comisión de corredor; no infiere
+            } elseif ($user['rol'] === 'corredor') {
+                $montoCorredor = $monto;
+                $montoAdmin    = 0;
+            } else {
+                $montoAdmin    = $monto;
+                $montoCorredor = 0;
+            }
+        }
+
+        $stmt = $db->prepare(
+            'INSERT INTO comisiones
+             (propiedad_id, usuario_id, cerrado_por_id, tipo_operacion, fecha, monto_total, monto_corredor, monto_admin, observaciones)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $propId,
+            (int) $user['id'],
+            $cerradoPorId,
+            $tipo,
+            $fecha,
+            $monto,
+            $montoCorredor,
+            $montoAdmin,
+            cp_nullable_string($body['observaciones'] ?? null),
+        ]);
+        cp_json(['ok' => true, 'id' => (int) $db->lastInsertId()]);
+    }
+
+    if (preg_match('#^/comisiones/(\d+)$#', $route, $m) && $method === 'GET') {
+        $user = cp_require_auth();
+        $db   = cp_db();
+        $id   = (int) $m[1];
+
+        $stmt = $db->prepare(
+            'SELECT c.*, pr.titulo AS propiedad_titulo, pr.codigo AS propiedad_codigo,
+                    u.nombre AS registrado_por_nombre, cb.nombre AS cerrado_por_nombre
+             FROM comisiones c
+             INNER JOIN propiedades pr ON pr.id = c.propiedad_id
+             INNER JOIN usuarios    u  ON u.id  = c.usuario_id
+             LEFT  JOIN usuarios    cb ON cb.id = c.cerrado_por_id
+             WHERE c.id = ? LIMIT 1'
+        );
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        if (!$row) cp_json_error('Comisión no encontrada.', 404);
+
+        if ($user['rol'] === 'corredor'
+            && (int) $row['usuario_id'] !== (int) $user['id']
+            && (int) ($row['cerrado_por_id'] ?? 0) !== (int) $user['id']) {
+            cp_json_error('Sin permiso.', 403);
+        }
+        cp_json(['ok' => true, 'item' => $row]);
+    }
+
+    if (preg_match('#^/comisiones/(\d+)$#', $route, $m) && $method === 'PUT') {
+        $user = cp_require_auth();
+        $db   = cp_db();
+        $body = cp_request_body();
+        $id   = (int) $m[1];
+
+        $row = $db->prepare('SELECT * FROM comisiones WHERE id = ? LIMIT 1');
+        $row->execute([$id]);
+        $row = $row->fetch();
+        if (!$row) cp_json_error('Comisión no encontrada.', 404);
+
+        if ($user['rol'] === 'corredor' && (int) $row['usuario_id'] !== (int) $user['id']) {
+            cp_json_error('Sin permiso.', 403);
+        }
+
+        $allowed = ['tipo_operacion', 'fecha', 'monto_total', 'monto_corredor', 'monto_admin', 'observaciones', 'cerrado_por_id'];
+        $sets    = [];
+        $values  = [];
+
+        foreach ($allowed as $f) {
+            if (!array_key_exists($f, $body)) continue;
+            $sets[]   = "{$f} = ?";
+            $values[] = $body[$f] === '' ? null : $body[$f];
+        }
+        if (!$sets) cp_json_error('No hay campos para actualizar.', 422);
+
+        $values[] = $id;
+        $db->prepare('UPDATE comisiones SET ' . implode(', ', $sets) . ', updated_at = NOW() WHERE id = ?')
+           ->execute($values);
+        cp_json(['ok' => true]);
+    }
+
+    if (preg_match('#^/comisiones/(\d+)$#', $route, $m) && $method === 'DELETE') {
+        $user = cp_require_admin();
+        $db   = cp_db();
+        $id   = (int) $m[1];
+
+        $exists = $db->prepare('SELECT id FROM comisiones WHERE id = ? LIMIT 1');
+        $exists->execute([$id]);
+        if (!$exists->fetch()) cp_json_error('Comisión no encontrada.', 404);
+
+        $db->prepare('DELETE FROM comisiones WHERE id = ?')->execute([$id]);
+        cp_json(['ok' => true]);
     }
 
     // =========================================================================
@@ -1057,3 +1631,105 @@ try {
     cp_write_log('api', $e->getMessage(), ['route' => $route, 'method' => $method, 'trace' => $e->getTraceAsString()]);
     cp_json_error('Error interno del servidor: ' . $e->getMessage(), 500);
 }
+
+// ── Helpers privados de API ────────────────────────────────────────────────
+
+/**
+ * Parsea el texto de plantilla de cita y extrae los campos conocidos.
+ * Formato de referencia:
+ *   VISITA: 29-03-2026
+ *   HORA: 11:00 am
+ *   LUGAR: Av Lloque Yupanqui 2do PISO (950)
+ *   CLIENTE: Alexander Mori
+ *   CELULAR: 992 596 825
+ */
+function cp_parse_cita_text(string $text): array
+{
+    $lines  = preg_split('/\r?\n/', trim($text));
+    $result = [
+        'tipo'    => 'Visita',
+        'fecha'   => null,
+        'hora'    => null,
+        'lugar'   => null,
+        'cliente' => null,
+        'celular' => null,
+        'monto'   => null,
+    ];
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if (!$line) continue;
+
+        // Separar clave: valor
+        if (!preg_match('/^([^:]+):\s*(.+)$/u', $line, $m)) continue;
+        $key = mb_strtolower(trim($m[1]));
+        $val = trim($m[2]);
+
+        if (in_array($key, ['visita','fecha','date'], true)) {
+            $result['tipo']  = 'Visita';
+            $result['fecha'] = cp_parse_date_str($val);
+        } elseif (in_array($key, ['llamada'], true)) {
+            $result['tipo']  = 'Llamada';
+            $result['fecha'] = cp_parse_date_str($val);
+        } elseif (in_array($key, ['reunión','reunion','meeting'], true)) {
+            $result['tipo']  = 'Reunión';
+            $result['fecha'] = cp_parse_date_str($val);
+        } elseif (in_array($key, ['hora','hour','time'], true)) {
+            $result['hora'] = cp_parse_time_str($val);
+        } elseif (in_array($key, ['lugar','dirección','direccion','location','address','inmueble'], true)) {
+            // Extraer monto entre paréntesis si existe: (950) → 950
+            if (preg_match('/\((\d[\d\s,\.]*)\)\s*$/', $val, $pm)) {
+                $result['monto'] = (float) preg_replace('/[\s,]/', '', $pm[1]);
+                $val = trim(preg_replace('/\s*\(\d[\d\s,\.]*\)\s*$/', '', $val));
+            }
+            $result['lugar'] = $val;
+        } elseif (in_array($key, ['cliente','client','nombre','name'], true)) {
+            $result['cliente'] = $val;
+        } elseif (in_array($key, ['celular','cel','teléfono','telefono','phone','whatsapp','wa'], true)) {
+            $result['celular'] = $val;
+        }
+    }
+
+    return $result;
+}
+
+function cp_parse_date_str(string $v): ?string
+{
+    $v = trim($v);
+    // dd-mm-yyyy o dd/mm/yyyy
+    if (preg_match('#^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$#', $v, $m)) {
+        return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+    }
+    // yyyy-mm-dd
+    if (preg_match('#^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$#', $v, $m)) {
+        return sprintf('%04d-%02d-%02d', (int)$m[1], (int)$m[2], (int)$m[3]);
+    }
+    // dd de mes de yyyy (español)
+    $meses = ['enero'=>1,'febrero'=>2,'marzo'=>3,'abril'=>4,'mayo'=>5,'junio'=>6,
+              'julio'=>7,'agosto'=>8,'septiembre'=>9,'octubre'=>10,'noviembre'=>11,'diciembre'=>12];
+    if (preg_match('/^(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})$/iu', $v, $m)) {
+        $mes = $meses[mb_strtolower($m[2])] ?? null;
+        if ($mes) return sprintf('%04d-%02d-%02d', (int)$m[3], $mes, (int)$m[1]);
+    }
+    return null;
+}
+
+function cp_parse_time_str(string $v): ?string
+{
+    $v = trim($v);
+    // HH:MM am/pm
+    if (preg_match('/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i', $v, $m)) {
+        $h = (int)$m[1];
+        $min = (int)$m[2];
+        $period = strtolower($m[3] ?? '');
+        if ($period === 'pm' && $h < 12) $h += 12;
+        if ($period === 'am' && $h === 12) $h = 0;
+        return sprintf('%02d:%02d:00', $h, $min);
+    }
+    // HH:MM:SS
+    if (preg_match('/^(\d{1,2}):(\d{2}):(\d{2})$/', $v, $m)) {
+        return sprintf('%02d:%02d:%02d', (int)$m[1], (int)$m[2], (int)$m[3]);
+    }
+    return null;
+}
+
