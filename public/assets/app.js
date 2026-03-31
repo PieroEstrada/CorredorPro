@@ -3,6 +3,20 @@
 
 const App = (() => {
   // ─── Estado global ────────────────────────────────────────────────────────
+  // ─── Hash routing ─────────────────────────────────────────────────────────
+  const VALID_PAGES = ['dashboard', 'properties', 'prospects', 'citas', 'comisiones', 'usuarios'];
+
+  function getPageFromHash() {
+    const hash = window.location.hash.replace(/^#/, '').trim();
+    return VALID_PAGES.includes(hash) ? hash : 'dashboard';
+  }
+
+  function setHash(page) {
+    if (window.location.hash.replace(/^#/, '') !== page) {
+      history.pushState(null, '', '#' + page);
+    }
+  }
+
   const state = {
     user:        null,
     page:        'dashboard',
@@ -170,7 +184,6 @@ const App = (() => {
             ${navBtn('properties',  'Propiedades')}
             ${navBtn('prospects',   'Prospectos')}
             ${navBtn('citas',       'Citas')}
-            ${navBtn('matches',     'Matches')}
             ${navBtn('comisiones',  'Comisiones')}
             ${state.user.rol === 'admin' ? navBtn('usuarios', 'Usuarios') : ''}
           </nav>
@@ -203,7 +216,6 @@ const App = (() => {
       case 'properties':  return renderProperties();
       case 'prospects':   return renderProspects();
       case 'citas':       return renderCitas();
-      case 'matches':     return renderMatches();
       case 'comisiones':  return renderComisiones();
       case 'usuarios':    return state.user.rol === 'admin' ? renderUsuarios() : '<p>Sin acceso.</p>';
       default:            return '<section class="card"><p>Página no disponible.</p></section>';
@@ -259,9 +271,6 @@ const App = (() => {
         </article>
         <article class="card stat">
           <span>${resumen.prospectos ?? state.prospects.length}</span><small>Prospectos</small>
-        </article>
-        <article class="card stat stat-orange">
-          <span>${resumen.matches_nuevos ?? state.matches.length}</span><small>Matches nuevos</small>
         </article>
         <article class="card stat">
           <span>${citasHoy.length}</span><small>Citas hoy</small>
@@ -359,6 +368,7 @@ const App = (() => {
   }
 
   function renderPropertyCard(item) {
+    const isAdmin = state.user?.rol === 'admin';
     const img = item.foto_principal
       ? h`<div class="card-foto"><img src="${uploadsBase}/propiedades/${item.id}/${escapeAttr(item.foto_principal)}" alt="Foto"></div>`
       : h`<div class="card-foto card-foto-empty"><span>Sin foto</span></div>`;
@@ -367,24 +377,46 @@ const App = (() => {
       ? h`<p class="limpieza-aviso">Limpieza de fotos programada: ${escapeHtml(item.limpieza_programada)}</p>`
       : '';
 
-    const adminBtns = state.user.rol === 'admin'
-      ? h`<div class="card-admin-btns">
-            ${item.estado !== 'Disponible' ? h`<button class="btn-sm btn-green" data-action="estado-disponible" data-id="${item.id}">Disponible</button>` : ''}
-            ${item.estado !== 'Alquilado'  ? h`<button class="btn-sm btn-orange" data-action="estado-alquilado" data-id="${item.id}">Alquilado</button>` : ''}
-            ${item.estado !== 'Vendido'    ? h`<button class="btn-sm btn-red" data-action="estado-vendido" data-id="${item.id}">Vendido</button>` : ''}
-            <button class="btn-sm btn-danger" data-action="delete-prop" data-id="${item.id}">Eliminar</button>
-          </div>`
-      : '';
+    // Menú de 3 puntos — acciones según rol
+    const menuItems = [
+      `<button class="card-menu-item" data-action="ver-detalle-prop" data-id="${item.id}">Ver detalle</button>`,
+      `<button class="card-menu-item" data-action="compartir-prop" data-id="${item.id}">Compartir</button>`,
+      `<button class="card-menu-item" data-action="ver-fotos" data-id="${item.id}">Ver fotos</button>`,
+      `<button class="card-menu-item" data-action="clientes-recomendados-prop" data-id="${item.id}">Clientes recomendados</button>`,
+    ];
+    if (isAdmin) {
+      menuItems.push('<hr class="card-menu-sep">');
+      menuItems.push(`<button class="card-menu-item" data-action="edit-prop" data-id="${item.id}">Editar propiedad</button>`);
+      if (item.estado !== 'Disponible') {
+        menuItems.push(`<button class="card-menu-item" data-action="estado-disponible" data-id="${item.id}">Marcar disponible</button>`);
+      }
+      if (item.estado === 'Disponible' && item.operacion === 'Alquiler') {
+        menuItems.push(`<button class="card-menu-item" data-action="estado-alquilado" data-id="${item.id}" data-titulo="${escapeAttr(item.titulo||'')}">Registrar alquiler</button>`);
+      }
+      if (item.estado === 'Disponible' && item.operacion === 'Venta') {
+        menuItems.push(`<button class="card-menu-item" data-action="estado-vendido" data-id="${item.id}" data-titulo="${escapeAttr(item.titulo||'')}">Registrar venta</button>`);
+      }
+      menuItems.push('<hr class="card-menu-sep">');
+      menuItems.push(`<button class="card-menu-item danger" data-action="delete-prop" data-id="${item.id}">Eliminar</button>`);
+    }
 
     return h`
-      <article class="card property-card">
+      <article class="card property-card" data-prop-id="${item.id}">
         ${img}
         <div class="property-top">
           <div>
             <small class="code-label">${escapeHtml(item.codigo)}</small>
             <h3>${escapeHtml(item.titulo || 'Sin título')}</h3>
           </div>
-          ${estadoPill(item.estado)}
+          <div style="display:flex;align-items:center;gap:6px">
+            ${estadoPill(item.estado)}
+            <div class="card-menu-wrap">
+              <button class="icon-btn card-menu-btn" data-action="open-prop-menu" data-id="${item.id}" title="Más opciones">&#8942;</button>
+              <div class="card-menu-dropdown" id="prop-menu-${item.id}">
+                ${menuItems.join('')}
+              </div>
+            </div>
+          </div>
         </div>
         <p>${escapeHtml(item.tipo || '-')} · ${escapeHtml(item.operacion || '-')}</p>
         <p class="precio">${escapeHtml(item.moneda || 'S/')} ${formatMoney(item.precio)}</p>
@@ -393,15 +425,9 @@ const App = (() => {
           <span>${item.habitaciones ?? '-'} hab.</span>
           <span>${item.banos ?? '-'} baños</span>
           <span>${item.area ?? '-'} m²</span>
-          ${item.latitud ? '<span class="has-pin">📍 Pin</span>' : ''}
+          ${item.latitud ? '<span class="has-pin">Pin</span>' : ''}
         </div>
         ${limpieza}
-        ${adminBtns}
-        <div class="card-btns">
-          <button class="btn-sm btn-outline" data-action="edit-prop" data-id="${item.id}">Editar</button>
-          <button class="btn-sm btn-outline" data-action="ver-fotos" data-id="${item.id}">Fotos</button>
-          <button class="btn-sm btn-outline" data-action="ver-matches-prop" data-id="${item.id}">Matches</button>
-        </div>
       </article>
     `;
   }
@@ -446,36 +472,93 @@ const App = (() => {
         return;
       }
 
+      // Agrupar propiedades que comparten las mismas coordenadas
+      const grupos = {};
       items.forEach(pin => {
-        const imgHtml = pin.foto_principal
-          ? `<img src="${uploadsBase}/propiedades/${pin.id}/${pin.foto_principal}" style="width:100%;max-height:120px;object-fit:cover;border-radius:6px;margin-bottom:6px">`
-          : '';
+        const lat = parseFloat(pin.latitud).toFixed(6);
+        const lng = parseFloat(pin.longitud).toFixed(6);
+        const key = `${lat},${lng}`;
+        if (!grupos[key]) grupos[key] = [];
+        grupos[key].push(pin);
+      });
 
-        const popup = `
-          <div style="min-width:180px;font-family:system-ui">
-            ${imgHtml}
-            <b style="color:#0f62fe">${escapeHtml(pin.codigo)}</b><br>
-            <span style="font-size:13px">${escapeHtml(pin.titulo || 'Sin título')}</span><br>
-            <span style="font-size:12px;color:#6b7280">${escapeHtml(pin.tipo || '-')} · ${escapeHtml(pin.operacion || '-')}</span><br>
-            <b>${escapeHtml(pin.moneda || 'S/')} ${formatMoney(pin.precio)}</b><br>
-            ${pin.estado === 'Disponible' ? '<span style="color:green">Disponible</span>' : `<span style="color:orange">${escapeHtml(pin.estado)}</span>`}
-          </div>`;
+      Object.entries(grupos).forEach(([key, pins]) => {
+        const [lat, lng] = key.split(',').map(Number);
 
-        // Color del pin según estado
-        const color = pin.estado === 'Disponible' ? '#16a34a'
-                    : pin.estado === 'Alquilado'  ? '#ea580c'
-                    : '#dc2626';
+        if (pins.length === 1) {
+          // ── Marcador simple ──────────────────────────────────────────
+          const pin = pins[0];
+          const imgHtml = pin.foto_principal
+            ? `<img src="${uploadsBase}/propiedades/${pin.id}/${pin.foto_principal}" style="width:100%;max-height:110px;object-fit:cover;border-radius:6px;margin-bottom:6px">`
+            : '';
+          const popup = `
+            <div style="min-width:190px;font-family:system-ui">
+              ${imgHtml}
+              <b style="color:#1a7a4a">${escapeHtml(pin.codigo)}</b><br>
+              <span style="font-size:13px">${escapeHtml(pin.titulo || 'Sin título')}</span><br>
+              <span style="font-size:12px;color:#6b7280">${escapeHtml(pin.tipo || '-')} · ${escapeHtml(pin.operacion || '-')}</span><br>
+              <b>${escapeHtml(pin.moneda || 'S/')} ${formatMoney(pin.precio)}</b><br>
+              ${pin.estado === 'Disponible'
+                ? '<span style="color:#16a34a;font-weight:600">Disponible</span>'
+                : `<span style="color:#ea580c;font-weight:600">${escapeHtml(pin.estado)}</span>`}
+              <br><button onclick="window._cpVerPropiedad(${pin.id})" class="popup-ver-btn">Ver detalle</button>
+            </div>`;
+          const color = pin.estado === 'Disponible' ? '#16a34a'
+                      : pin.estado === 'Alquilado'  ? '#ea580c'
+                      : '#dc2626';
+          const icon = L.divIcon({
+            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.4)"></div>`,
+            className: '',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
+          });
+          L.marker([lat, lng], { icon }).addTo(leafletMap).bindPopup(popup);
 
-        const icon = L.divIcon({
-          html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.4)"></div>`,
-          className: '',
-          iconSize: [14, 14],
-          iconAnchor: [7, 7],
-        });
+        } else {
+          // ── Marcador agrupado: varias propiedades en el mismo punto ──
+          const hayDisponible = pins.some(p => p.estado === 'Disponible');
+          const clusterColor  = hayDisponible ? '#16a34a' : '#ea580c';
 
-        L.marker([parseFloat(pin.latitud), parseFloat(pin.longitud)], { icon })
-          .addTo(leafletMap)
-          .bindPopup(popup);
+          const icon = L.divIcon({
+            html: `<div class="map-cluster" style="background:${clusterColor}">${pins.length}</div>`,
+            className: '',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          });
+
+          const filas = pins.map((p, i) => {
+            const img = p.foto_principal
+              ? `<img src="${uploadsBase}/propiedades/${p.id}/${p.foto_principal}" style="width:100%;max-height:80px;object-fit:cover;border-radius:4px;margin-bottom:6px">`
+              : '';
+            const sep = i < pins.length - 1 ? '<hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb">' : '';
+            return `
+              <div style="padding:2px 0">
+                ${img}
+                <b style="color:#1a7a4a;font-size:12px">${escapeHtml(p.codigo)}</b><br>
+                <span style="font-size:13px;font-weight:600">${escapeHtml(p.titulo || 'Sin título')}</span><br>
+                <span style="font-size:11px;color:#6b7280">${escapeHtml(p.tipo || '-')} · ${escapeHtml(p.operacion || '-')}</span><br>
+                <b style="font-size:13px">${escapeHtml(p.moneda || 'S/')} ${formatMoney(p.precio)}</b>
+                ${p.estado === 'Disponible'
+                  ? ' <span style="color:#16a34a;font-size:11px;font-weight:600">● Disponible</span>'
+                  : ` <span style="color:#ea580c;font-size:11px;font-weight:600">● ${escapeHtml(p.estado)}</span>`}
+                <br><button onclick="window._cpVerPropiedad(${p.id})" class="popup-ver-btn" style="margin-top:6px">Ver detalle</button>
+              </div>${sep}`;
+          }).join('');
+
+          const popup = `
+            <div style="min-width:230px;max-width:270px;font-family:system-ui">
+              <div style="font-weight:700;font-size:13px;padding:0 0 8px;color:#1e293b;border-bottom:2px solid #e5e7eb">
+                ${pins.length} propiedades en este punto
+              </div>
+              <div style="max-height:280px;overflow-y:auto;padding:10px 0 14px">
+                ${filas}
+              </div>
+            </div>`;
+
+          L.marker([lat, lng], { icon })
+            .addTo(leafletMap)
+            .bindPopup(popup, { maxWidth: 270, maxHeight: 400 });
+        }
       });
 
       toast(`${items.length} propiedad(es) en el mapa.`);
@@ -548,6 +631,23 @@ const App = (() => {
   }
 
   function renderProspectCard(item) {
+    const reqs = item.requerimientos || [];
+    let reqHtml = '';
+    if (reqs.length > 0) {
+      const r    = reqs[0];
+      const tags = [
+        (r.tipos_inmueble || []).join(', '),
+        r.presupuesto_max ? `Hasta S/ ${formatMoney(r.presupuesto_max)}` : '',
+        r.cochera && r.cochera !== 'NO_TIENE' ? 'Cochera: ' + r.cochera.toLowerCase() : '',
+        parseInt(r.requiere_propiedad_con_mascota) ? 'Acepta mascotas' : '',
+        parseInt(r.primer_piso) ? '1er piso' : '',
+      ].filter(Boolean);
+      const extra = reqs.length > 1 ? ` <span class="req-extra">+${reqs.length - 1} más</span>` : '';
+      reqHtml = `<div class="req-summary">${tags.map(t => `<span class="req-tag">${escapeHtml(t)}</span>`).join('')}${extra}</div>`;
+    } else {
+      reqHtml = '<p class="req-none muted">Sin requerimientos registrados</p>';
+    }
+
     return h`
       <article class="card">
         <div class="property-top">
@@ -558,9 +658,11 @@ const App = (() => {
         </div>
         ${item.celular ? h`<p>${escapeHtml(item.celular)}${item.whatsapp && item.whatsapp !== item.celular ? ` · WA: ${escapeHtml(item.whatsapp)}` : ''}</p>` : '<p class="muted">Sin teléfono</p>'}
         ${item.dni ? h`<p class="muted" style="font-size:12px">DNI: ${escapeHtml(item.dni)}</p>` : ''}
+        ${reqHtml}
         <div class="card-btns">
-          <button class="btn-sm btn-outline" data-action="edit-prospect" data-id="${item.id}">Editar</button>
+          <button class="btn-sm btn-outline" data-action="inmuebles-recomendados-prosp" data-id="${item.id}" data-nombre="${escapeAttr(item.nombre)}">Inmuebles rec.</button>
           <button class="btn-sm btn-outline" data-action="ver-requerimientos" data-id="${item.id}" data-nombre="${escapeAttr(item.nombre)}">Requerimientos</button>
+          <button class="btn-sm btn-outline" data-action="edit-prospect" data-id="${item.id}">Editar</button>
           <button class="btn-sm btn-outline" data-action="ver-citas-prospecto" data-id="${item.id}" data-nombre="${escapeAttr(item.nombre)}">Citas</button>
           <button class="btn-sm btn-outline" data-action="ver-comentarios" data-id="${item.id}" data-nombre="${escapeAttr(item.nombre)}">Notas</button>
         </div>
@@ -606,13 +708,13 @@ const App = (() => {
       <section class="toolbar">
         <div>
           <h1>Matches</h1>
-          <p>Compatibilidad calculada automáticamente. Solo tus propiedades y tus prospectos.</p>
+          <p>Compatibilidades entre propiedades y tus prospectos según sus requerimientos.</p>
         </div>
       </section>
       <section class="list-grid">
         ${state.matches.length
           ? state.matches.map(renderMatchCard).join('')
-          : '<article class="card"><p>No hay matches generados. Agrega requerimientos a tus prospectos para ver compatibilidades.</p></article>'}
+          : '<article class="card"><p>No hay matches generados. Agrega requerimientos a tus prospectos para ver compatibilidades. También puedes usar "Clientes recomendados" desde cualquier propiedad.</p></article>'}
       </section>
     `;
   }
@@ -651,6 +753,160 @@ const App = (() => {
     } catch (e) {
       toast(e.message);
     }
+  }
+
+  // ─── Clientes recomendados para una propiedad ─────────────────────────────
+
+  async function openClientesRecomendadosModal(propId) {
+    try {
+      const res   = await request(`/propiedades/${propId}/clientes-recomendados`);
+      const items = res.items || [];
+      const prop  = state.properties.find(p => p.id === propId);
+      const titulo = prop ? escapeHtml(prop.titulo || prop.codigo || '#' + propId) : '#' + propId;
+      openModal(h`
+        <div class="modal-header">
+          <h3>Clientes recomendados · ${titulo}</h3>
+          <button class="icon-btn" id="close-modal">×</button>
+        </div>
+        <div class="modal-body">
+          ${items.length
+            ? items.map(m => h`
+                <div class="match-prospect-row">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <b>${escapeHtml(m.prospecto_nombre)}</b>
+                    <span class="pill ${nivelColor(m.nivel)}">${m.score}% &middot; ${escapeHtml(m.nivel || '')}</span>
+                  </div>
+                  <div class="match-bar-wrap"><div class="match-bar" style="width:${m.score}%"></div></div>
+                  <ul class="reason-list" style="margin-top:4px">
+                    ${(m.razones || []).map(r => `<li class="${r.startsWith('—') ? 'reason-no' : 'reason-ok'}">${escapeHtml(r)}</li>`).join('')}
+                  </ul>
+                  ${m.prospecto_celular ? h`<p style="font-size:12px;margin-top:4px">Cel: ${escapeHtml(m.prospecto_celular)}${m.prospecto_whatsapp ? ' · WA: ' + escapeHtml(m.prospecto_whatsapp) : ''}</p>` : ''}
+                </div>`).join('')
+            : '<p class="muted">Ninguno de tus prospectos tiene requerimientos compatibles con esta propiedad. Agrega requerimientos a tus prospectos para habilitar el matching.</p>'}
+          <div class="actions" style="margin-top:14px">
+            <button id="close-cli-modal">Cerrar</button>
+          </div>
+        </div>
+      `);
+      document.getElementById('close-modal').onclick   = closeModal;
+      document.getElementById('close-cli-modal').onclick = closeModal;
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
+  // ─── Inmuebles recomendados para un prospecto ─────────────────────────────
+
+  async function openInmueblesRecomendadosModal(prospId, nombre) {
+    try {
+      const res   = await request(`/prospectos/${prospId}/inmuebles-recomendados`);
+      const items = res.items || [];
+      const sinReqs = res.sin_requerimientos || false;
+      openModal(h`
+        <div class="modal-header">
+          <h3>Inmuebles recomendados · ${escapeHtml(nombre || '#' + prospId)}</h3>
+          <button class="icon-btn" id="close-modal">×</button>
+        </div>
+        <div class="modal-body">
+          ${sinReqs
+            ? '<p class="muted">Este prospecto no tiene requerimientos registrados. Agrégalos desde el botón "Requerimientos" para ver propiedades compatibles.</p>'
+            : items.length
+              ? items.map(m => h`
+                  <div class="match-prospect-row">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                      <div>
+                        <span class="code-label">${escapeHtml(m.propiedad_codigo || '')}</span>
+                        <b style="display:block;font-size:14px">${escapeHtml(m.propiedad_titulo || 'Sin título')}</b>
+                        <span style="font-size:12px;color:var(--muted)">${escapeHtml(m.propiedad_tipo||'')} · ${escapeHtml(m.propiedad_operacion||'')} · ${escapeHtml(m.propiedad_ubicacion||'')}</span>
+                        <b style="display:block;color:var(--primary);font-size:13px">${escapeHtml(m.propiedad_moneda||'S/')} ${formatMoney(m.propiedad_precio)}</b>
+                      </div>
+                      <span class="pill ${nivelColor(m.nivel)}" style="white-space:nowrap">${m.score}%</span>
+                    </div>
+                    <div class="match-bar-wrap" style="margin:6px 0 4px"><div class="match-bar" style="width:${m.score}%"></div></div>
+                    <ul class="reason-list">
+                      ${(m.razones||[]).map(r=>`<li class="${r.startsWith('—')?'reason-no':'reason-ok'}">${escapeHtml(r)}</li>`).join('')}
+                    </ul>
+                    <button class="btn-sm btn-outline" style="margin-top:6px" data-action="ver-detalle-prop" data-id="${m.propiedad_id}">Ver propiedad</button>
+                  </div>`).join('')
+              : '<p class="muted">No hay propiedades disponibles compatibles con los requerimientos de este prospecto.</p>'}
+          <div class="actions" style="margin-top:14px">
+            <button id="close-inm-modal">Cerrar</button>
+          </div>
+        </div>
+      `);
+      document.getElementById('close-modal').onclick   = closeModal;
+      document.getElementById('close-inm-modal').onclick = closeModal;
+      // "Ver propiedad" buttons inside the modal (modal-root is outside main-content)
+      document.getElementById('modal-root')?.addEventListener('click', async ev => {
+        const b = ev.target.closest('[data-action="ver-detalle-prop"]');
+        if (!b) return;
+        closeModal();
+        await openPropertyDetailModal(parseInt(b.dataset.id));
+      }, { once: true });
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
+  // ─── Compartir propiedad ───────────────────────────────────────────────────
+
+  function buildShareText(item) {
+    if (item.descripcion_original && item.descripcion_original.trim()) {
+      return item.descripcion_original.trim();
+    }
+    const partes = [];
+    const tipo  = [item.tipo, item.operacion].filter(Boolean).join(' en ');
+    if (tipo)  partes.push(tipo);
+    if (item.titulo) partes.push(item.titulo);
+    partes.push('');
+    if (item.precio)   partes.push(`Precio: ${item.moneda || 'S/'} ${formatMoney(item.precio)}`);
+    if (item.ubicacion || item.distrito) partes.push(`Ubicación: ${item.ubicacion || item.distrito}`);
+    const detalles = [
+      item.habitaciones ? item.habitaciones + ' hab.' : '',
+      item.banos ? item.banos + ' baños' : '',
+      item.area  ? item.area + ' m²' : '',
+    ].filter(Boolean).join(' · ');
+    if (detalles) partes.push(detalles);
+    if (item.cochera && item.cochera !== 'NO_TIENE') partes.push('Cochera: Sí');
+    if (item.mascotas === 'sí' || item.mascotas === 'si') partes.push('Acepta mascotas');
+    const refs = Array.isArray(item.referencias) ? item.referencias : [];
+    if (refs.length) partes.push('Referencias: ' + refs.join(', '));
+    if (item.link_maps) partes.push(item.link_maps);
+    return partes.join('\n').trim();
+  }
+
+  function openCompartirPropModal(item) {
+    const texto = buildShareText(item);
+    const waUrl = 'https://wa.me/?text=' + encodeURIComponent(texto);
+    openModal(h`
+      <div class="modal-header">
+        <h3>Compartir · ${escapeHtml(item.titulo || item.codigo || '')}</h3>
+        <button class="icon-btn" id="close-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <label style="font-size:13px;color:var(--muted)">Texto a compartir</label>
+        <textarea id="share-text" rows="9" style="margin-top:6px;font-size:13px;line-height:1.5">${escapeHtml(texto)}</textarea>
+        <div class="actions" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+          <button id="btn-share-copy" class="secondary">Copiar texto</button>
+          <button id="btn-share-wa" data-wa-url="${escapeAttr(waUrl)}">WhatsApp</button>
+          <button class="secondary" id="close-share-modal">Cerrar</button>
+        </div>
+      </div>
+    `);
+    document.getElementById('close-modal').onclick      = closeModal;
+    document.getElementById('close-share-modal').onclick = closeModal;
+    document.getElementById('btn-share-copy').onclick = () => {
+      const ta = document.getElementById('share-text');
+      navigator.clipboard?.writeText(ta.value).then(() => toast('Texto copiado.')).catch(() => {
+        ta.select();
+        document.execCommand('copy');
+        toast('Texto copiado.');
+      });
+    };
+    document.getElementById('btn-share-wa').onclick = () => {
+      const ta = document.getElementById('share-text');
+      window.open('https://wa.me/?text=' + encodeURIComponent(ta?.value || texto), '_blank', 'noopener');
+    };
   }
 
   // ─── Usuarios (admin) ─────────────────────────────────────────────────────
@@ -726,6 +982,7 @@ const App = (() => {
       btn.addEventListener('click', async () => {
         closeSidebar();
         state.page = btn.dataset.page;
+        setHash(state.page);   // persiste en URL para que F5 restaure el módulo
         if (state.page === 'usuarios' && state.users.length === 0) {
           await loadUsers();
         }
@@ -751,6 +1008,7 @@ const App = (() => {
       state.comisiones  = [];
       state._comResumen = {};
       state.dashboard   = {};
+      history.replaceState(null, '', window.location.pathname); // limpia el hash al salir
       mount();
     });
 
@@ -765,6 +1023,11 @@ const App = (() => {
 
     // Delegación de eventos en cards
     document.getElementById('main-content')?.addEventListener('click', handleCardAction);
+
+    // Cierra menús flotantes al hacer scroll (position:fixed no se mueve con scroll)
+    document.getElementById('main-content')?.addEventListener('scroll', () => {
+      document.querySelectorAll('.card-menu-dropdown.open').forEach(m => m.classList.remove('open'));
+    }, { passive: true });
 
     // ─── Buscador propiedades (tiempo real, sin llamada API) ─────────────────
     const fpSearch = document.getElementById('fp-search');
@@ -849,23 +1112,70 @@ const App = (() => {
   }
 
   async function handleCardAction(e) {
+    // Cierra todos los menús desplegables si el clic es fuera de un card-menu-wrap
+    if (!e.target.closest('.card-menu-wrap')) {
+      document.querySelectorAll('.card-menu-dropdown.open').forEach(m => m.classList.remove('open'));
+    }
+
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const { action, id, nombre, activo } = btn.dataset;
 
-    if (action === 'edit-prop') {
+    if (action === 'open-prop-menu') {
+      const menuEl = document.getElementById(`prop-menu-${id}`);
+      if (!menuEl) return;
+      const isOpen = menuEl.classList.contains('open');
+      // Cierra todos los demás
+      document.querySelectorAll('.card-menu-dropdown.open').forEach(m => m.classList.remove('open'));
+      if (!isOpen) {
+        menuEl.classList.add('open');
+        // Posicionar con fixed relativo al viewport, para escapar de overflow:hidden
+        requestAnimationFrame(() => {
+          const btnRect   = btn.getBoundingClientRect();
+          const menuW     = menuEl.offsetWidth  || 200;
+          const menuH     = menuEl.offsetHeight || 200;
+          const vpW       = window.innerWidth;
+          const vpH       = window.innerHeight;
+          // Horizontal: alinear borde derecho con el botón, pero sin salir del viewport
+          let left = btnRect.right - menuW;
+          if (left < 8)           left = 8;
+          if (left + menuW > vpW - 8) left = vpW - menuW - 8;
+          // Vertical: abajo por defecto, arriba si no hay espacio
+          let top = btnRect.bottom + 4;
+          if (top + menuH > vpH - 8) top = btnRect.top - menuH - 4;
+          if (top < 8) top = 8;
+          menuEl.style.left = left + 'px';
+          menuEl.style.top  = top  + 'px';
+        });
+      }
+      return;
+    }
+
+    // Cierra el menú abierto al ejecutar cualquier acción
+    document.querySelectorAll('.card-menu-dropdown.open').forEach(m => m.classList.remove('open'));
+
+    if (action === 'ver-detalle-prop') {
+      await openPropertyDetailModal(parseInt(id));
+    } else if (action === 'compartir-prop') {
+      const item = state.properties.find(p => p.id === parseInt(id));
+      if (item) openCompartirPropModal(item);
+    } else if (action === 'clientes-recomendados-prop') {
+      await openClientesRecomendadosModal(parseInt(id));
+    } else if (action === 'edit-prop') {
       await openPropertyEdit(parseInt(id));
     } else if (action === 'ver-fotos') {
       await openFotosModal(parseInt(id));
     } else if (action === 'estado-disponible') {
       await cambiarEstadoPropiedad(parseInt(id), 'Disponible');
     } else if (action === 'estado-alquilado') {
-      await cambiarEstadoPropiedad(parseInt(id), 'Alquilado');
+      await openCierreModal(parseInt(id), 'Alquilado', btn.dataset.titulo || '');
     } else if (action === 'estado-vendido') {
-      await cambiarEstadoPropiedad(parseInt(id), 'Vendido');
+      await openCierreModal(parseInt(id), 'Vendido', btn.dataset.titulo || '');
     } else if (action === 'delete-prop') {
       if (!confirm(`¿Eliminar definitivamente la propiedad #${id}? Se borrarán también sus fotos. Esta acción no se puede deshacer.`)) return;
       await eliminarPropiedad(parseInt(id));
+    } else if (action === 'inmuebles-recomendados-prosp') {
+      await openInmueblesRecomendadosModal(parseInt(id), nombre);
     } else if (action === 'edit-prospect') {
       await openProspectEdit(parseInt(id));
     } else if (action === 'ver-requerimientos') {
@@ -944,7 +1254,6 @@ const App = (() => {
       loadProspects(),
       loadCitas(),
       loadDashboard(),
-      request('/matches?min=40').then(r => { state.matches = r.items || []; }),
     ]);
   }
 
@@ -1176,91 +1485,525 @@ const App = (() => {
     }
   }
 
-  function renderFotosModal(propId, fotos) {
-    const lista = fotos.length
-      ? fotos.map(f => h`
-          <div class="foto-item">
-            <img src="${uploadsBase}/propiedades/${propId}/${escapeAttr(f.filename)}" alt="">
-            <div class="foto-btns">
-              ${f.es_principal ? '<span class="pill pill-green" style="font-size:11px">Principal</span>' : `<button class="btn-sm btn-outline" data-foto-id="${f.id}" data-action-foto="principal">Principal</button>`}
-              <button class="btn-sm btn-danger" data-foto-id="${f.id}" data-action-foto="delete">Eliminar</button>
-            </div>
-          </div>`).join('')
-      : '<p class="muted">No hay fotos aún.</p>';
+  // Renderiza solo la galería interna (sin abrir/cerrar el modal)
+  function _renderFotosGrid(propId, fotos) {
+    const isAdmin = state.user?.rol === 'admin';
+    if (!fotos.length) {
+      return '<p class="muted fotos-empty">Aún no hay fotos para esta propiedad.</p>';
+    }
+    return fotos.map(f => h`
+      <div class="foto-item">
+        <img src="${uploadsBase}/propiedades/${propId}/${escapeAttr(f.filename)}" alt="" loading="lazy">
+        <div class="foto-btns">
+          ${f.es_principal
+            ? '<span class="pill pill-green" style="font-size:11px">Principal</span>'
+            : (isAdmin ? `<button class="btn-sm btn-outline" data-foto-id="${f.id}" data-action-foto="principal">Principal</button>` : '')}
+          ${isAdmin ? `<button class="btn-sm btn-danger" data-foto-id="${f.id}" data-action-foto="delete">×</button>` : ''}
+        </div>
+      </div>`).join('');
+  }
 
+  // Recarga y repinta solo el grid interno del modal (sin cerrar el modal).
+  // Devuelve el array de fotos actualizado para que el llamador pueda reusar.
+  async function _refrescarFotosGrid(propId) {
+    const res   = await request(`/propiedades/${propId}/fotos`);
+    const fotos = res.items || [];
+    const grid  = document.getElementById('fotos-grid');
+    if (grid) grid.innerHTML = _renderFotosGrid(propId, fotos);
+    const titulo = document.getElementById('fotos-modal-titulo');
+    if (titulo) titulo.textContent = `Fotos · ${fotos.length} imagen${fotos.length !== 1 ? 'es' : ''}`;
+    return fotos;
+  }
+
+  // Actualiza solo la tarjeta de la propiedad en el listado, sin recargar nada más.
+  function _updatePropertyCardFoto(propId, fotos) {
+    const principal = fotos.find(f => parseInt(f.es_principal) === 1);
+    const newFilename = principal?.filename || null;
+
+    const idx = state.properties.findIndex(p => p.id === propId);
+    if (idx !== -1) {
+      state.properties[idx] = { ...state.properties[idx], foto_principal: newFilename };
+    }
+
+    // Reemplaza solo la tarjeta afectada en el DOM
+    const cardEl = document.querySelector(`[data-prop-id="${propId}"]`);
+    if (cardEl && idx !== -1) {
+      // outerHTML reemplaza el nodo entero; insertAdjacentHTML mantiene el flujo del grid
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderPropertyCard(state.properties[idx]);
+      cardEl.replaceWith(tmp.firstElementChild);
+    } else {
+      // Si la tarjeta no está visible (filtros), refresca el listado completo
+      const listEl = document.getElementById('prop-list');
+      if (listEl) listEl.innerHTML = renderPropList(getFilteredProperties());
+    }
+  }
+
+  function renderFotosModal(propId, fotos) {
+    const isAdmin = state.user?.rol === 'admin';
     openModal(h`
       <div class="modal-header">
-        <h3>Fotos de propiedad #${propId}</h3>
+        <h3 id="fotos-modal-titulo">Fotos · ${fotos.length} imagen${fotos.length !== 1 ? 'es' : ''}</h3>
         <button class="icon-btn" id="close-modal">×</button>
       </div>
-      <div class="modal-body">
-        <div class="fotos-grid" id="fotos-grid">
-          ${lista}
-        </div>
-        <hr style="margin:16px 0">
-        <label><b>Subir nuevas fotos</b> (JPG, PNG, WEBP · máx. 5 MB c/u)
+      <div class="modal-body fotos-modal-body">
+
+        <div class="fotos-grid" id="fotos-grid">${_renderFotosGrid(propId, fotos)}</div>
+
+        ${isAdmin ? h`
+        <div class="foto-dropzone" id="foto-dropzone" tabindex="0" role="button" aria-label="Zona de carga de imágenes">
           <input type="file" id="fotos-input" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
-        </label>
-        <div class="actions" style="margin-top:12px">
-          <button class="secondary" id="cancel-fotos">Cerrar</button>
-          <button id="upload-fotos">Subir fotos</button>
+          <div class="foto-dz-icon">
+            <svg width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+          </div>
+          <p class="foto-dz-texto">Arrastra imágenes aquí o <span class="link-like">selecciona archivos</span></p>
+          <p class="foto-dz-hint">JPG · PNG · WEBP · máx. 5 MB c/u · puedes seleccionar varias</p>
         </div>
-        <div id="fotos-progress" style="margin-top:10px"></div>
+
+        <div id="fotos-preview-wrap" style="display:none">
+          <div class="fotos-preview-grid" id="fotos-preview"></div>
+          <div class="fotos-upload-bar">
+            <span id="fotos-count-label" class="fotos-count"></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="secondary" id="btn-cancel-sel">Cancelar selección</button>
+              <button id="upload-fotos">Subir fotos</button>
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
+        <div class="actions" style="margin-top:16px">
+          <button id="cancel-fotos">Cerrar</button>
+        </div>
       </div>
     `);
 
-    document.getElementById('close-modal').onclick   = closeModal;
-    document.getElementById('cancel-fotos').onclick  = closeModal;
+    document.getElementById('close-modal').onclick  = closeModal;
+    document.getElementById('cancel-fotos').onclick = closeModal;
 
-    // Acciones sobre fotos existentes
-    document.getElementById('fotos-grid')?.addEventListener('click', async e => {
+    // ── Acciones sobre fotos existentes (actualiza solo el grid) ──────────
+    document.getElementById('fotos-grid').addEventListener('click', async e => {
       const btn = e.target.closest('[data-action-foto]');
       if (!btn) return;
       const { actionFoto, fotoId } = btn.dataset;
 
       if (actionFoto === 'delete') {
         if (!confirm('¿Eliminar esta foto?')) return;
+        btn.disabled = true;
         try {
           await request(`/fotos/${fotoId}`, { method: 'DELETE', body: '{}' });
-          await openFotosModal(propId);
-          await loadData();
-        } catch (err) { toast(err.message); }
+          toast('Foto eliminada.');
+          const fotos = await _refrescarFotosGrid(propId);
+          _updatePropertyCardFoto(propId, fotos);
+        } catch (err) { btn.disabled = false; toast(err.message); }
       }
-
       if (actionFoto === 'principal') {
+        btn.disabled = true;
         try {
           await request(`/fotos/${fotoId}/principal`, { method: 'PUT', body: '{}' });
-          await openFotosModal(propId);
-          await loadData();
-        } catch (err) { toast(err.message); }
+          toast('Foto principal actualizada.');
+          const fotos = await _refrescarFotosGrid(propId);
+          _updatePropertyCardFoto(propId, fotos);
+        } catch (err) { btn.disabled = false; toast(err.message); }
       }
     });
 
-    // Subir fotos
-    document.getElementById('upload-fotos').onclick = async () => {
-      const input = document.getElementById('fotos-input');
-      if (!input.files.length) { toast('Selecciona al menos una foto.'); return; }
+    // ── Dropzone: drag-and-drop + click (solo admin) ──────────────────────
+    if (!isAdmin) return;   // corredores solo ven galería
+
+    let selectedFiles = [];
+
+    const dropzone    = document.getElementById('foto-dropzone');
+    const fileInput   = document.getElementById('fotos-input');
+    const previewWrap = document.getElementById('fotos-preview-wrap');
+    const previewGrid = document.getElementById('fotos-preview');
+    const countLabel  = document.getElementById('fotos-count-label');
+
+    // Abrir selector de archivos al hacer clic en la zona
+    dropzone.addEventListener('click',   () => fileInput.click());
+    dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+
+    // Drag & drop
+    dropzone.addEventListener('dragover',  e => { e.preventDefault(); dropzone.classList.add('over'); });
+    dropzone.addEventListener('dragleave', ()  => dropzone.classList.remove('over'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('over');
+      showPreview(Array.from(e.dataTransfer.files));
+    });
+
+    // Selector de archivo normal
+    fileInput.addEventListener('change', () => showPreview(Array.from(fileInput.files)));
+
+    function showPreview(files) {
+      if (!files.length) return;
+      selectedFiles = files;
+      previewGrid.innerHTML = '';
+      for (const file of files) {
+        const url = URL.createObjectURL(file);
+        const div = document.createElement('div');
+        div.className = 'preview-thumb';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = '';
+        img.addEventListener('load', () => URL.revokeObjectURL(url));
+        const span = document.createElement('span');
+        span.className = 'preview-name';
+        span.textContent = file.name;
+        div.appendChild(img);
+        div.appendChild(span);
+        previewGrid.appendChild(div);
+      }
+      countLabel.textContent = `${files.length} foto${files.length !== 1 ? 's' : ''} seleccionada${files.length !== 1 ? 's' : ''}`;
+      previewWrap.style.display = '';
+    }
+
+    document.getElementById('btn-cancel-sel').addEventListener('click', () => {
+      selectedFiles = [];
+      fileInput.value = '';
+      previewGrid.innerHTML = '';
+      previewWrap.style.display = 'none';
+    });
+
+    // ── Subida ────────────────────────────────────────────────────────────
+    document.getElementById('upload-fotos').addEventListener('click', async () => {
+      if (!selectedFiles.length) { toast('Selecciona al menos una foto.'); return; }
+
+      const uploadBtn = document.getElementById('upload-fotos');
+      const cancelBtn = document.getElementById('btn-cancel-sel');
+      uploadBtn.disabled  = true;
+      cancelBtn.disabled  = true;
+      uploadBtn.textContent = 'Subiendo…';
+      countLabel.textContent = 'Subiendo, por favor espera…';
 
       const fd = new FormData();
-      for (const file of input.files) {
-        fd.append('fotos[]', file);
-      }
+      for (const file of selectedFiles) fd.append('fotos[]', file);
 
-      const prog = document.getElementById('fotos-progress');
-      prog.textContent = 'Subiendo…';
       try {
-        const res = await request(`/propiedades/${propId}/fotos`, { method: 'POST', body: fd });
-        prog.textContent = `Subidas: ${res.uploaded.length}. Omitidas: ${res.skipped.length}.`;
-        await openFotosModal(propId);
-        await loadData();
+        const res      = await request(`/propiedades/${propId}/fotos`, { method: 'POST', body: fd });
+        const subidas  = res.uploaded?.length || 0;
+        const omitidas = res.skipped?.length  || 0;
+
+        // Limpiar área de selección
+        selectedFiles = [];
+        fileInput.value = '';
+        previewGrid.innerHTML = '';
+        previewWrap.style.display = 'none';
+
+        // Actualizar galería interna del modal y la tarjeta en el listado de propiedades
+        const fotosActualizadas = await _refrescarFotosGrid(propId);
+        _updatePropertyCardFoto(propId, fotosActualizadas);
+
+        if (subidas > 0) {
+          toast(`${subidas} foto${subidas !== 1 ? 's' : ''} subida${subidas !== 1 ? 's' : ''} correctamente.${omitidas ? ` (${omitidas} omitida${omitidas !== 1 ? 's' : ''})` : ''}`);
+        } else {
+          toast('No se subió ninguna foto. Revisa el formato y tamaño (máx. 5 MB).');
+        }
       } catch (err) {
-        prog.textContent = '';
-        toast(err.message);
+        uploadBtn.disabled  = false;
+        cancelBtn.disabled  = false;
+        uploadBtn.textContent = 'Subir fotos';
+        countLabel.textContent = '';
+        toast('Error al subir: ' + err.message);
       }
+    });
+  }
+
+  // ─── Vista de detalle de propiedad ───────────────────────────────────────
+
+  async function openPropertyDetailModal(propId) {
+    try {
+      const res = await request(`/propiedades/${propId}`);
+      renderPropertyDetailModal(res.item);
+    } catch (e) {
+      toast(e.message || 'No se pudo cargar la propiedad.');
+    }
+  }
+
+  function renderPropertyDetailModal(p) {
+    const fotos = p.fotos || [];
+    const uploadsUrl = uploadsBase;
+
+    // Galería: la foto principal va primero, luego el resto
+    const fotosOrdenadas = [...fotos].sort((a, b) => b.es_principal - a.es_principal);
+    const galeriaHtml = fotosOrdenadas.length
+      ? h`<div class="detalle-galeria" id="detalle-galeria">
+          ${fotosOrdenadas.map(f => h`<img
+            src="${uploadsUrl}/propiedades/${p.id}/${escapeAttr(f.filename)}"
+            class="detalle-foto${f.es_principal ? ' es-principal' : ''}"
+            alt=""
+            loading="lazy">`).join('')}
+        </div>`
+      : '';
+
+    // ── Helpers ──
+    const campo = (label, val) => {
+      if (val === null || val === undefined || val === '' || val === false) return '';
+      return h`<div class="detalle-campo">
+                 <span class="detalle-label">${escapeHtml(label)}</span>
+                 <span class="detalle-valor">${escapeHtml(String(val))}</span>
+               </div>`;
     };
+
+    // Operación y estado pills
+    const opCls     = p.operacion === 'Venta' ? 'pill-red' : 'pill-orange';
+    const estadoCls = p.estado === 'Disponible' ? 'pill-green'
+                    : p.estado === 'Alquilado'  ? 'pill-orange' : 'pill-red';
+
+    // Amenidades (bool fields)
+    const amenMap = [
+      ['amoblado',              'Amoblado'],
+      ['lavanderia',            'Lavandería'],
+      ['terraza',               'Terraza'],
+      ['patio',                 'Patio'],
+      ['seguridad',             'Seguridad'],
+      ['rejas',                 'Rejas'],
+      ['porton',                'Portón'],
+      ['aire_acondicionado',    'Aire acondicionado'],
+      ['internet_incluido',     'Internet incluido'],
+      ['mantenimiento_incluido','Mantenimiento incluido'],
+      ['ninos_permitidos',      'Niños permitidos'],
+    ];
+    const amenidades = amenMap.filter(([k]) => parseInt(p[k]) === 1).map(([, v]) => v);
+    const amenHtml = amenidades.length
+      ? h`<div class="detalle-campo detalle-campo-full">
+            <span class="detalle-label">Amenidades</span>
+            <div class="detalle-pills-wrap">${amenidades.map(a => `<span class="pill pill-gray">${escapeHtml(a)}</span>`).join('')}</div>
+          </div>`
+      : '';
+
+    // Referencias
+    const refs = Array.isArray(p.referencias) && p.referencias.length
+      ? h`<div class="detalle-campo detalle-campo-full">
+            <span class="detalle-label">Referencias</span>
+            <span class="detalle-valor">${escapeHtml(p.referencias.join(' · '))}</span>
+          </div>`
+      : '';
+
+    // Cochera
+    const cocheraVal = p.cochera === 'CARRO' ? 'Sí (carro)' : p.cochera === 'MOTO' ? 'Sí (moto)' : null;
+
+    // Agua
+    const aguaVal = parseInt(p.agua_incluida) === 1 ? 'Incluida' : parseInt(p.agua_a_consumo) === 1 ? 'A consumo' : null;
+
+    // Maps link
+    const mapsHtml = p.link_maps
+      ? h`<div class="detalle-campo detalle-campo-full">
+            <span class="detalle-label">Google Maps</span>
+            <a href="${escapeAttr(p.link_maps)}" target="_blank" rel="noopener" class="detalle-maps-link">Abrir ubicación</a>
+          </div>`
+      : '';
+
+    // Descripción
+    const descHtml = p.descripcion_original
+      ? h`<div class="detalle-desc">
+            <div class="detalle-label" style="margin-bottom:6px">Descripción original</div>
+            <div class="detalle-desc-text">${escapeHtml(p.descripcion_original)}</div>
+          </div>`
+      : '';
+
+    openModal(h`
+      <div class="modal-header">
+        <h3>
+          <small class="code-label" style="margin-right:6px">${escapeHtml(p.codigo || '')}</small>${escapeHtml(p.titulo || 'Sin título')}
+        </h3>
+        <button class="icon-btn" id="close-modal">×</button>
+      </div>
+      <div class="modal-body detalle-modal-body">
+        ${galeriaHtml}
+
+        <div class="detalle-pills" style="margin:4px 0 12px">
+          ${p.operacion ? h`<span class="pill ${opCls}">${escapeHtml(p.operacion)}</span>` : ''}
+          ${p.estado    ? h`<span class="pill ${estadoCls}">${escapeHtml(p.estado)}</span>` : ''}
+          ${p.tipo      ? h`<span class="pill pill-gray">${escapeHtml(p.tipo)}</span>` : ''}
+        </div>
+
+        <div class="detalle-precio">
+          ${escapeHtml(p.moneda || 'S/')} ${formatMoney(p.precio)}
+        </div>
+
+        <div class="detalle-grid">
+          ${campo('Ubicación',        p.ubicacion)}
+          ${campo('Distrito',         p.distrito)}
+          ${campo('Ciudad',           p.ciudad)}
+          ${campo('Piso',             p.piso != null ? 'Piso ' + p.piso : null)}
+          ${campo('Habitaciones',     p.habitaciones != null ? p.habitaciones + ' hab.' : null)}
+          ${campo('Baños',            p.banos != null ? p.banos + ' baños' : null)}
+          ${campo('Medios baños',     p.medios_banos || null)}
+          ${campo('Área total',       p.area ? p.area + ' m²' : null)}
+          ${campo('Área construida',  p.area_construida ? p.area_construida + ' m²' : null)}
+          ${campo('Cochera',          cocheraVal)}
+          ${campo('Mascotas',         p.mascotas || null)}
+          ${campo('Agua',             aguaVal)}
+          ${p.agua_monto ? campo('Monto agua', 'S/ ' + formatMoney(p.agua_monto)) : ''}
+          ${p.luz_monto  ? campo('Monto luz',  'S/ ' + formatMoney(p.luz_monto))  : ''}
+          ${p.mes_adelantado  ? campo('Meses adelantado', p.mes_adelantado)  : ''}
+          ${p.mes_garantia    ? campo('Meses garantía',   p.mes_garantia)    : ''}
+          ${p.contrato_minimo ? campo('Contrato mínimo',  p.contrato_minimo + ' meses') : ''}
+          ${amenHtml}
+          ${refs}
+          ${mapsHtml}
+        </div>
+
+        ${descHtml}
+
+        <div class="detalle-acciones">
+          <button class="secondary" id="btn-detalle-compartir">Compartir</button>
+          <button class="secondary" id="btn-detalle-clientes">Clientes recomendados</button>
+          ${state.user?.rol === 'admin' ? h`
+            <button class="secondary" id="btn-detalle-fotos">Gestionar fotos</button>
+            <button class="secondary" id="btn-detalle-editar">Editar</button>
+          ` : ''}
+        </div>
+      </div>
+    `);
+
+    document.getElementById('close-modal').onclick = closeModal;
+    document.getElementById('btn-detalle-compartir').onclick = () => { closeModal(); openCompartirPropModal(p); };
+    document.getElementById('btn-detalle-clientes').onclick  = () => { closeModal(); openClientesRecomendadosModal(p.id); };
+    if (state.user?.rol === 'admin') {
+      document.getElementById('btn-detalle-fotos').onclick  = () => { closeModal(); openFotosModal(p.id); };
+      document.getElementById('btn-detalle-editar').onclick = () => { closeModal(); openPropertyEdit(p.id); };
+    }
   }
 
   // ─── Cambiar estado de propiedad ──────────────────────────────────────────
+
+  // ─── Modal de cierre de operación (Alquilar / Vender) ────────────────────
+
+  async function openCierreModal(propId, estadoNuevo, tituloHint) {
+    if (state.user.rol === 'admin' && state.users.length === 0) {
+      await loadUsers();
+    }
+    const tipoOp    = estadoNuevo === 'Vendido' ? 'Venta' : 'Alquiler';
+    const btnLabel  = estadoNuevo === 'Vendido' ? 'Vender' : 'Alquilar';
+    const today     = new Date().toISOString().slice(0, 10);
+    const tituloStr = tituloHint || ('#' + propId);
+
+    const corredorOpts = state.users
+      .filter(u => u.rol === 'corredor')
+      .map(u => `<option value="${u.id}">${escapeHtml(u.nombre)}</option>`)
+      .join('');
+
+    openModal(h`
+      <div class="modal-header">
+        <h3>${escapeHtml(btnLabel)}: ${escapeHtml(tituloStr)}</h3>
+        <button class="icon-btn" id="close-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="cierre-form" class="grid-form">
+          <label>Tipo de operación
+            <input type="text" readonly value="${escapeAttr(tipoOp)}" style="background:var(--bg);cursor:default">
+          </label>
+          ${inputField('fecha', 'Fecha de cierre *', today, 'date')}
+
+          <label class="full cierre-section-label">Responsable de la operación</label>
+          <div class="full radio-group" id="rg-responsable">
+            <label class="radio-opt"><input type="radio" name="responsable_tipo" value="admin" checked> Yo mismo (admin)</label>
+            ${corredorOpts ? `<label class="radio-opt"><input type="radio" name="responsable_tipo" value="corredor_registrado"> Corredor registrado</label>` : ''}
+            <label class="radio-opt"><input type="radio" name="responsable_tipo" value="corredor_externo"> Corredor externo (no registrado)</label>
+          </div>
+          <div id="sel-corredor-reg" class="full" style="display:none">
+            <label>Corredor registrado *
+              <select name="cerrado_por_id">
+                <option value="">Seleccionar...</option>
+                ${corredorOpts}
+              </select>
+            </label>
+          </div>
+          <div id="sel-corredor-ext" class="full" style="display:none">
+            ${inputField('corredor_externo', 'Nombre del corredor externo *', '', 'text', 'Nombre completo')}
+          </div>
+
+          <label class="full cierre-section-label">Comisión</label>
+          ${inputField('monto_total', 'Comisión base (S/)', '', 'number', 'Ej: 1500')}
+          <div id="comision-corredor-section" style="display:none" class="full">
+            <div class="grid-form" style="margin:0;padding:0">
+              ${inputField('porcentaje_corredor', '% corredor', '', 'number', 'Ej: 50')}
+              ${inputField('monto_corredor', 'Monto corredor (S/)', '', 'number', 'Auto-calculado')}
+              ${inputField('monto_admin', 'Monto admin (S/)', '', 'number', 'Auto-calculado')}
+            </div>
+          </div>
+
+          <label class="full cierre-section-label">Pago</label>
+          ${inputField('fecha_pago', 'Fecha de pago (o prevista)', '', 'date')}
+          ${selectField('estado_pago', 'Estado de pago', 'Pendiente', ['Pendiente', 'Pagado'])}
+
+          <label class="full">Observaciones
+            <textarea name="observaciones" rows="2"></textarea>
+          </label>
+        </form>
+        <div class="actions" style="margin-top:14px">
+          <button class="secondary" id="cancel-cierre">Cancelar</button>
+          <button id="confirm-cierre">${escapeHtml(btnLabel)}</button>
+        </div>
+      </div>
+    `);
+
+    document.getElementById('close-modal').onclick   = closeModal;
+    document.getElementById('cancel-cierre').onclick  = closeModal;
+
+    // Mostrar/ocultar selectores según tipo de responsable
+    document.getElementById('rg-responsable').addEventListener('change', e => {
+      const val = e.target.value;
+      document.getElementById('sel-corredor-reg').style.display          = val === 'corredor_registrado' ? '' : 'none';
+      document.getElementById('sel-corredor-ext').style.display          = val === 'corredor_externo'    ? '' : 'none';
+      document.getElementById('comision-corredor-section').style.display = val !== 'admin'               ? '' : 'none';
+    });
+
+    // Auto-calcular monto corredor / admin según porcentaje
+    const recalc = () => {
+      const total = parseFloat(document.querySelector('[name=monto_total]')?.value || '0');
+      const pct   = parseFloat(document.querySelector('[name=porcentaje_corredor]')?.value || '0');
+      if (!isNaN(total) && !isNaN(pct) && total > 0) {
+        const mc = Math.round(total * pct / 100 * 100) / 100;
+        const ma = Math.round((total - mc) * 100) / 100;
+        const inpMc = document.querySelector('[name=monto_corredor]');
+        const inpMa = document.querySelector('[name=monto_admin]');
+        if (inpMc) inpMc.value = mc;
+        if (inpMa) inpMa.value = ma;
+      }
+    };
+    document.querySelector('[name=monto_total]')?.addEventListener('input', recalc);
+    document.querySelector('[name=porcentaje_corredor]')?.addEventListener('input', recalc);
+
+    document.getElementById('confirm-cierre').onclick = () => ejecutarCierre(propId, estadoNuevo);
+  }
+
+  async function ejecutarCierre(propId, estadoNuevo) {
+    const fd              = new FormData(document.getElementById('cierre-form'));
+    const responsableTipo = fd.get('responsable_tipo') || 'admin';
+    const montoTotalRaw   = fd.get('monto_total');
+    const payload = {
+      estado:               estadoNuevo,
+      fecha:                fd.get('fecha'),
+      monto_total:          montoTotalRaw ? parseFloat(montoTotalRaw) : null,
+      responsable_tipo:     responsableTipo,
+      cerrado_por_id:       responsableTipo === 'corredor_registrado' ? (fd.get('cerrado_por_id') || null) : null,
+      corredor_externo:     responsableTipo === 'corredor_externo'    ? (fd.get('corredor_externo') || null) : null,
+      porcentaje_corredor:  parseFloat(fd.get('porcentaje_corredor') || '0'),
+      monto_corredor:       fd.get('monto_corredor') ? parseFloat(fd.get('monto_corredor')) : null,
+      monto_admin:          fd.get('monto_admin')    ? parseFloat(fd.get('monto_admin'))    : null,
+      fecha_pago:           fd.get('fecha_pago')     || null,
+      estado_pago:          fd.get('estado_pago')    || 'Pendiente',
+      observaciones:        fd.get('observaciones')  || null,
+    };
+    try {
+      const res = await request(`/propiedades/${propId}/cerrar`, {
+        method: 'POST',
+        body:   JSON.stringify(payload),
+      });
+      const label = estadoNuevo === 'Vendido' ? 'vendida' : 'alquilada';
+      toast(`Propiedad marcada como ${label}.${res.comision_id ? ' Comisión registrada.' : ''}`);
+      closeModal();
+      await loadData();
+      mount();
+    } catch (err) {
+      toast(err.message);
+    }
+  }
 
   async function cambiarEstadoPropiedad(id, estado) {
     const msj = estado === 'Disponible'
@@ -1628,9 +2371,13 @@ const App = (() => {
                 <span class="pill ${c.tipo_operacion === 'Venta' ? 'pill-red' : 'pill-orange'}">${escapeHtml(c.tipo_operacion)}</span>
               </div>
               <p><b>S/ ${formatMoney(c.monto_total)}</b> total · ${escapeHtml(c.fecha || '')}</p>
-              ${c.monto_corredor != null ? h`<p class="muted">Corredor: S/ ${formatMoney(c.monto_corredor)}</p>` : ''}
+              ${c.monto_corredor != null ? h`<p class="muted">Corredor: S/ ${formatMoney(c.monto_corredor)}${c.porcentaje_corredor ? ` (${escapeHtml(String(c.porcentaje_corredor))}%)` : ''}</p>` : ''}
               ${c.monto_admin    != null ? h`<p class="muted">Admin: S/ ${formatMoney(c.monto_admin)}</p>` : ''}
-              <p class="muted" style="font-size:12px">Cerrado por: ${escapeHtml(c.cerrado_por_nombre || c.registrado_por_nombre || 'N/A')}</p>
+              <p class="muted" style="font-size:12px">Responsable: ${escapeHtml(c.cerrado_por_nombre || c.corredor_externo ? (c.cerrado_por_nombre || ('Ext. · ' + c.corredor_externo)) : (c.registrado_por_nombre || 'Admin'))}</p>
+              <p class="muted" style="font-size:12px">
+                Pago: <span class="pill ${c.estado_pago === 'Pagado' ? 'pill-green' : 'pill-gray'}" style="font-size:11px">${escapeHtml(c.estado_pago || 'Pendiente')}</span>
+                ${c.fecha_pago ? ` · ${escapeHtml(c.fecha_pago)}` : ''}
+              </p>
               ${c.observaciones ? h`<p style="font-size:12px">${escapeHtml(c.observaciones)}</p>` : ''}
               <div class="card-btns">
                 <button class="btn-sm btn-outline" data-action="edit-comision" data-id="${c.id}">Editar</button>
@@ -1647,11 +2394,16 @@ const App = (() => {
       `<option value="${p.id}" ${data.propiedad_id == p.id ? 'selected' : ''}>${escapeHtml(p.codigo + ' · ' + (p.titulo || 'Sin título'))}</option>`
     ).join('');
 
-    const corredorOptions = state.user.rol === 'admin'
-      ? (state.users.filter(u => u.rol === 'corredor').map(u =>
-          `<option value="${u.id}" ${data.cerrado_por_id == u.id ? 'selected' : ''}>${escapeHtml(u.nombre)}</option>`
-        ).join(''))
-      : '';
+    const corredorOptions = state.users.filter(u => u.rol === 'corredor').map(u =>
+      `<option value="${u.id}" ${data.cerrado_por_id == u.id ? 'selected' : ''}>${escapeHtml(u.nombre)}</option>`
+    ).join('');
+
+    // Determinar tipo de responsable inicial para el formulario de edición
+    let respTipoInit = 'admin';
+    if (data.cerrado_por_id) respTipoInit = 'corredor_registrado';
+    else if (data.corredor_externo) respTipoInit = 'corredor_externo';
+
+    const isAdmin = state.user.rol === 'admin';
 
     openModal(h`
       <div class="modal-header">
@@ -1667,18 +2419,37 @@ const App = (() => {
             </select>
           </label>
           ${selectField('tipo_operacion', 'Tipo de operación', data.tipo_operacion || 'Alquiler', ['Alquiler','Venta'])}
-          ${inputField('fecha',         'Fecha *',           data.fecha || new Date().toISOString().slice(0,10), 'date')}
-          ${inputField('monto_total',   'Monto total (S/) *', data.monto_total ?? '', 'number')}
-          ${inputField('monto_corredor','Parte corredor (S/)', data.monto_corredor ?? '', 'number')}
-          ${inputField('monto_admin',   'Parte admin (S/)',   data.monto_admin ?? '', 'number')}
-          ${state.user.rol === 'admin' && corredorOptions
-            ? h`<label>Cerrado por corredor
-                  <select name="cerrado_por_id">
-                    <option value="">Yo mismo (admin)</option>
-                    ${corredorOptions}
-                  </select>
-                </label>`
-            : ''}
+          ${inputField('fecha', 'Fecha *', data.fecha || new Date().toISOString().slice(0,10), 'date')}
+          ${inputField('monto_total', 'Comisión base (S/) *', data.monto_total ?? '', 'number')}
+
+          ${isAdmin ? h`
+            <label class="full cierre-section-label">Responsable</label>
+            <div class="full radio-group" id="rg-responsable-com">
+              <label class="radio-opt"><input type="radio" name="responsable_tipo" value="admin" ${respTipoInit === 'admin' ? 'checked' : ''}> Yo mismo (admin)</label>
+              ${corredorOptions ? `<label class="radio-opt"><input type="radio" name="responsable_tipo" value="corredor_registrado" ${respTipoInit === 'corredor_registrado' ? 'checked' : ''}> Corredor registrado</label>` : ''}
+              <label class="radio-opt"><input type="radio" name="responsable_tipo" value="corredor_externo" ${respTipoInit === 'corredor_externo' ? 'checked' : ''}> Corredor externo</label>
+            </div>
+            <div id="com-sel-reg" class="full" style="display:${respTipoInit === 'corredor_registrado' ? '' : 'none'}">
+              <label>Corredor registrado
+                <select name="cerrado_por_id">
+                  <option value="">Seleccionar...</option>
+                  ${corredorOptions}
+                </select>
+              </label>
+            </div>
+            <div id="com-sel-ext" class="full" style="display:${respTipoInit === 'corredor_externo' ? '' : 'none'}">
+              ${inputField('corredor_externo', 'Nombre corredor externo', data.corredor_externo || '', 'text')}
+            </div>
+            <div id="com-sec-corredor" class="full" style="display:${respTipoInit !== 'admin' ? '' : 'none'}">
+              <div class="grid-form" style="margin:0;padding:0">
+                ${inputField('porcentaje_corredor', '% corredor', data.porcentaje_corredor ?? '', 'number', 'Ej: 50')}
+                ${inputField('monto_corredor', 'Monto corredor (S/)', data.monto_corredor ?? '', 'number')}
+                ${inputField('monto_admin', 'Monto admin (S/)', data.monto_admin ?? '', 'number')}
+              </div>
+            </div>` : ''}
+
+          ${inputField('fecha_pago', 'Fecha de pago (o prevista)', data.fecha_pago || '', 'date')}
+          ${selectField('estado_pago', 'Estado de pago', data.estado_pago || 'Pendiente', ['Pendiente', 'Pagado'])}
           <label class="full">Observaciones
             <textarea name="observaciones" rows="2">${escapeHtml(data.observaciones || '')}</textarea>
           </label>
@@ -1690,22 +2461,48 @@ const App = (() => {
       </div>
     `);
 
-    document.getElementById('close-modal').onclick     = closeModal;
-    document.getElementById('cancel-comision').onclick  = closeModal;
-    document.getElementById('save-comision').onclick    = () => saveComision(data.id || null);
+    document.getElementById('close-modal').onclick    = closeModal;
+    document.getElementById('cancel-comision').onclick = closeModal;
+
+    if (isAdmin) {
+      document.getElementById('rg-responsable-com')?.addEventListener('change', e => {
+        const val = e.target.value;
+        document.getElementById('com-sel-reg').style.display     = val === 'corredor_registrado' ? '' : 'none';
+        document.getElementById('com-sel-ext').style.display     = val === 'corredor_externo'    ? '' : 'none';
+        document.getElementById('com-sec-corredor').style.display = val !== 'admin'              ? '' : 'none';
+      });
+      const recalcCom = () => {
+        const total = parseFloat(document.querySelector('#comision-form [name=monto_total]')?.value || '0');
+        const pct   = parseFloat(document.querySelector('#comision-form [name=porcentaje_corredor]')?.value || '0');
+        if (!isNaN(total) && !isNaN(pct) && total > 0) {
+          const mc = Math.round(total * pct / 100 * 100) / 100;
+          document.querySelector('#comision-form [name=monto_corredor]').value = mc;
+          document.querySelector('#comision-form [name=monto_admin]').value    = Math.round((total - mc) * 100) / 100;
+        }
+      };
+      document.querySelector('#comision-form [name=monto_total]')?.addEventListener('input', recalcCom);
+      document.querySelector('#comision-form [name=porcentaje_corredor]')?.addEventListener('input', recalcCom);
+    }
+
+    document.getElementById('save-comision').onclick = () => saveComision(data.id || null);
   }
 
   async function saveComision(editId) {
-    const fd      = new FormData(document.getElementById('comision-form'));
+    const fd              = new FormData(document.getElementById('comision-form'));
+    const responsableTipo = fd.get('responsable_tipo') || 'admin';
     const payload = {
-      propiedad_id:    fd.get('propiedad_id'),
-      tipo_operacion:  fd.get('tipo_operacion'),
-      fecha:           fd.get('fecha'),
-      monto_total:     fd.get('monto_total'),
-      monto_corredor:  fd.get('monto_corredor') || null,
-      monto_admin:     fd.get('monto_admin')    || null,
-      cerrado_por_id:  fd.get('cerrado_por_id') || null,
-      observaciones:   fd.get('observaciones'),
+      propiedad_id:        fd.get('propiedad_id'),
+      tipo_operacion:      fd.get('tipo_operacion'),
+      fecha:               fd.get('fecha'),
+      monto_total:         fd.get('monto_total'),
+      porcentaje_corredor: fd.get('porcentaje_corredor') || null,
+      monto_corredor:      fd.get('monto_corredor') || null,
+      monto_admin:         fd.get('monto_admin')    || null,
+      cerrado_por_id:      responsableTipo === 'corredor_registrado' ? (fd.get('cerrado_por_id') || null) : null,
+      corredor_externo:    responsableTipo === 'corredor_externo'    ? (fd.get('corredor_externo') || null) : null,
+      fecha_pago:          fd.get('fecha_pago')  || null,
+      estado_pago:         fd.get('estado_pago') || 'Pendiente',
+      observaciones:       fd.get('observaciones'),
     };
     try {
       if (editId) {
@@ -2380,11 +3177,7 @@ const App = (() => {
         await request(`/prospectos/${prospId}/requerimientos`, { method: 'POST', body: JSON.stringify(payload) });
         toast('Requerimiento agregado.');
         await openRequerimientosModal(prospId, nombre);
-        // Recalcular matches
-        await Promise.all([
-          loadProspects(),
-          request('/matches?min=40').then(r => { state.matches = r.items || []; }),
-        ]);
+        await loadProspects();
       } catch (err) { toast(err.message); }
     };
   }
@@ -2457,15 +3250,34 @@ const App = (() => {
   // ─── Bootstrap ───────────────────────────────────────────────────────────
 
   async function bootstrap() {
+    // Restore page from hash on browser back/forward (popstate fires on history.back/forward)
+    window.addEventListener('popstate', async () => {
+      if (!state.user) return;
+      const page = getPageFromHash();
+      if (page === state.page) return;
+      state.page = page;
+      if (page === 'usuarios' && state.users.length === 0) await loadUsers();
+      if (page === 'comisiones') await loadComisiones();
+      if (page === 'citas') await loadCitas();
+      mount();
+    });
+
     try {
       const res  = await request('/auth/me');
       state.user = res.user;
+      // Restore module from URL hash on page refresh
+      state.page = getPageFromHash();
+      if (state.page === 'usuarios') await loadUsers();
+      if (state.page === 'comisiones') await loadComisiones();
       await loadData();
     } catch (_) {
       state.user = null;
     }
     mount();
   }
+
+  // Expuesto globalmente para poder llamarlo desde onclick en los popups de Leaflet
+  window._cpVerPropiedad = id => openPropertyDetailModal(parseInt(id)).catch(e => toast(e.message));
 
   return { bootstrap };
 })();
